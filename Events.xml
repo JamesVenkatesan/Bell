@@ -1,0 +1,379 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Attachments</key>
+	<array/>
+	<key>Settings</key>
+	<dict>
+		<key>ColorSettings</key>
+		<dict>
+			<key>ECE 20869</key>
+			<array>
+				<real>0.46666666666666667</real>
+				<real>0.46666666666666667</real>
+				<real>0.46666666666666667</real>
+			</array>
+			<key>ECE 30100</key>
+			<array>
+				<real>0.50588235294117645</real>
+				<real>0.50588235294117645</real>
+				<real>0.50588235294117645</real>
+			</array>
+			<key>ECE 30200</key>
+			<array>
+				<real>0.58823529411764708</real>
+				<real>0.58823529411764708</real>
+				<real>0.58823529411764708</real>
+			</array>
+			<key>ECE 30864</key>
+			<array>
+				<real>0.63137254901960782</real>
+				<real>0.63137254901960782</real>
+				<real>0.63137254901960782</real>
+			</array>
+			<key>ECE 30864L</key>
+			<array>
+				<real>0.67450980392156867</real>
+				<real>0.67450980392156867</real>
+				<real>0.67450980392156867</real>
+			</array>
+			<key>ECE 36200</key>
+			<array>
+				<real>0.76470588235294112</real>
+				<real>0.76470588235294112</real>
+				<real>0.76470588235294112</real>
+			</array>
+			<key>ECE 36200L</key>
+			<array>
+				<real>0.80784313725490198</real>
+				<real>0.80784313725490198</real>
+				<real>0.80784313725490198</real>
+			</array>
+			<key>ECE 39401</key>
+			<array>
+				<real>0.27058823529411763</real>
+				<real>0.27058823529411763</real>
+				<real>0.27058823529411763</real>
+			</array>
+			<key>SOC 1000D</key>
+			<array>
+				<real>0.30980392156862746</real>
+				<real>0.30980392156862746</real>
+				<real>0.30980392156862746</real>
+			</array>
+			<key>TA: ECE 36800</key>
+			<array>
+				<real>0.5490196078431373</real>
+				<real>0.5490196078431373</real>
+				<real>0.5490196078431373</real>
+			</array>
+		</dict>
+		<key>NumberOfWeeks</key>
+		<integer>1</integer>
+		<key>WeekendDaysAreActive</key>
+		<false/>
+	</dict>
+	<key>TaskCategories</key>
+	<array/>
+	<key>TaskEvents</key>
+	<array/>
+	<key>WeekEvents</key>
+	<array>
+		<dict>
+			<key>dayNum</key>
+			<integer>0</integer>
+			<key>endTime</key>
+			<real>59400</real>
+			<key>info</key>
+			<string>WALC 1018</string>
+			<key>time</key>
+			<real>55800</real>
+			<key>title</key>
+			<string>ECE 30200</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>2</integer>
+			<key>endTime</key>
+			<real>64800</real>
+			<key>info</key>
+			<string>EVER 500</string>
+			<key>time</key>
+			<real>63900</real>
+			<key>title</key>
+			<string>SOC 1000D</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>3</integer>
+			<key>endTime</key>
+			<real>31500</real>
+			<key>info</key>
+			<string>BHEE 170</string>
+			<key>time</key>
+			<real>27000</real>
+			<key>title</key>
+			<string>ECE 30100</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>3</integer>
+			<key>endTime</key>
+			<real>64800</real>
+			<key>info</key>
+			<string>EVER 500</string>
+			<key>time</key>
+			<real>63900</real>
+			<key>title</key>
+			<string>SOC 1000D</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>0</integer>
+			<key>endTime</key>
+			<real>64800</real>
+			<key>info</key>
+			<string>EVER 500</string>
+			<key>time</key>
+			<real>63900</real>
+			<key>title</key>
+			<string>SOC 1000D</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>4</integer>
+			<key>endTime</key>
+			<real>64800</real>
+			<key>info</key>
+			<string>EVER 500</string>
+			<key>time</key>
+			<real>63900</real>
+			<key>title</key>
+			<string>SOC 1000D</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>1</integer>
+			<key>endTime</key>
+			<real>63900</real>
+			<key>info</key>
+			<string>UC 114</string>
+			<key>time</key>
+			<real>59400</real>
+			<key>title</key>
+			<string>ECE 20869</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>4</integer>
+			<key>endTime</key>
+			<real>30600</real>
+			<key>info</key>
+			<string>WTHR 200</string>
+			<key>time</key>
+			<real>27000</real>
+			<key>title</key>
+			<string>ECE 36200</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>2</integer>
+			<key>endTime</key>
+			<real>59400</real>
+			<key>info</key>
+			<string>WALC 1018</string>
+			<key>time</key>
+			<real>55800</real>
+			<key>title</key>
+			<string>ECE 30200</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>2</integer>
+			<key>endTime</key>
+			<real>41400</real>
+			<key>info</key>
+			<string>BHEE 162</string>
+			<key>time</key>
+			<real>30600</real>
+			<key>title</key>
+			<string>ECE 36200L</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>1</integer>
+			<key>endTime</key>
+			<real>64800</real>
+			<key>info</key>
+			<string>EVER 500</string>
+			<key>time</key>
+			<real>63900</real>
+			<key>title</key>
+			<string>SOC 1000D</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>4</integer>
+			<key>endTime</key>
+			<real>59400</real>
+			<key>info</key>
+			<string>WALC 1018</string>
+			<key>time</key>
+			<real>55800</real>
+			<key>title</key>
+			<string>ECE 30200</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>0</integer>
+			<key>endTime</key>
+			<real>37800</real>
+			<key>info</key>
+			<string>WALC 2088</string>
+			<key>time</key>
+			<real>34200</real>
+			<key>title</key>
+			<string>ECE 30864</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>3</integer>
+			<key>endTime</key>
+			<real>63900</real>
+			<key>info</key>
+			<string>UC 114</string>
+			<key>time</key>
+			<real>59400</real>
+			<key>title</key>
+			<string>ECE 20869</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>3</integer>
+			<key>endTime</key>
+			<real>41400</real>
+			<key>info</key>
+			<string>BHEE 206</string>
+			<key>time</key>
+			<real>34200</real>
+			<key>title</key>
+			<string>ECE 30864L</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>1</integer>
+			<key>endTime</key>
+			<real>31500</real>
+			<key>info</key>
+			<string>BHEE 170</string>
+			<key>time</key>
+			<real>27000</real>
+			<key>title</key>
+			<string>ECE 30100</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>3</integer>
+			<key>endTime</key>
+			<real>48600</real>
+			<key>info</key>
+			<string>WALC 2088</string>
+			<key>time</key>
+			<real>45000</real>
+			<key>title</key>
+			<string>ECE 39401</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>0</integer>
+			<key>endTime</key>
+			<real>30600</real>
+			<key>info</key>
+			<string>WTHR 200</string>
+			<key>time</key>
+			<real>27000</real>
+			<key>title</key>
+			<string>ECE 36200</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>2</integer>
+			<key>endTime</key>
+			<real>30600</real>
+			<key>info</key>
+			<string>WTHR 200</string>
+			<key>time</key>
+			<real>27000</real>
+			<key>title</key>
+			<string>ECE 36200</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>0</integer>
+			<key>endTime</key>
+			<real>52200</real>
+			<key>info</key>
+			<string>BHEE 206</string>
+			<key>time</key>
+			<real>45000</real>
+			<key>title</key>
+			<string>TA: ECE 36800</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>dayNum</key>
+			<integer>2</integer>
+			<key>endTime</key>
+			<real>52200</real>
+			<key>info</key>
+			<string>BHEE 206</string>
+			<key>time</key>
+			<real>45000</real>
+			<key>title</key>
+			<string>TA: ECE 36800</string>
+			<key>weekNum</key>
+			<integer>0</integer>
+		</dict>
+	</array>
+</dict>
+</plist>
