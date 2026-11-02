@@ -13,27 +13,36 @@ import SwiftUI
 /// stay separable because they were never relying on hue to begin with.
 enum Palette {
 
-    /// Ink and paper. Not pure black — the schedule is read at arm's length in
-    /// lecture halls, and a slightly blue-shifted dark holds up better under
-    /// the warm cast of True Tone.
-    static let ink = Color(red: 0.078, green: 0.102, blue: 0.133)
-    static let rail = Color(red: 0.165, green: 0.196, blue: 0.239)
-    static let paper = Color(red: 0.980, green: 0.973, blue: 0.957)
-
-    /// Ordered light → dark. Each entry is a hue chosen to sit at its assigned
-    /// luminance, so `relativeLuminance` steps roughly evenly down the list.
-    private static let steps: [Color] = [
-        Color(red: 0.98, green: 0.87, blue: 0.55), // straw
-        Color(red: 0.62, green: 0.86, blue: 0.76), // seafoam
-        Color(red: 0.98, green: 0.70, blue: 0.60), // apricot
-        Color(red: 0.53, green: 0.74, blue: 0.94), // sky
-        Color(red: 0.85, green: 0.60, blue: 0.85), // orchid
-        Color(red: 0.36, green: 0.68, blue: 0.55), // fern
-        Color(red: 0.91, green: 0.42, blue: 0.42), // coral
-        Color(red: 0.42, green: 0.48, blue: 0.82), // indigo
-        Color(red: 0.60, green: 0.34, blue: 0.55), // plum
-        Color(red: 0.24, green: 0.32, blue: 0.42), // slate
+    /// Ordered light to dark, at evenly spaced perceptual lightness: CIELAB
+    /// L* 92 down to 29 in steps of exactly 7. Solved for, not picked: each
+    /// hue's lightness was searched until it landed on its target, which is
+    /// why they're saturated and still separable once a tinted home screen
+    /// throws the hue away. No red, so the signal colour stays unique.
+    static let steps: [Color] = [
+        Color(hex: 0xFFEA5F), // Lemon      L* 92
+        Color(hex: 0x8CED1D), // Lime       L* 85
+        Color(hex: 0x18D8BF), // Aqua       L* 78
+        Color(hex: 0xFF9326), // Tangerine  L* 71
+        Color(hex: 0x16A2F9), // Sky        L* 64
+        Color(hex: 0xFA3986), // Pink       L* 57
+        Color(hex: 0x0B8854), // Jade       L* 50
+        Color(hex: 0x7A34F4), // Violet     L* 43
+        Color(hex: 0x1241DB), // Cobalt     L* 36
+        Color(hex: 0x731781), // Plum       L* 29
     ]
+
+    static let stepNames = ["Lemon", "Lime", "Aqua", "Tangerine", "Sky",
+                            "Pink", "Jade", "Violet", "Cobalt", "Plum"]
+
+    /// Which steps `count` courses take: spread over the whole ramp, ends
+    /// included. Taking the first N made a six-course term all light colours,
+    /// close together in lightness and bland together on screen.
+    static func spread(_ count: Int) -> [Int] {
+        guard count > 0 else { return [] }
+        guard count > 1 else { return [0] }
+        let last = steps.count - 1
+        return (0 ..< count).map { Int((Double($0) * Double(last) / Double(count - 1)).rounded()) % steps.count }
+    }
 
     /// Stable assignment: the same course gets the same step every launch,
     /// and lab sections inherit their lecture's color.
@@ -48,10 +57,13 @@ enum Palette {
 
         guard !families.isEmpty else { return [:] }
 
-        let stride = max(1, steps.count / families.count)
+        // More families than steps wrap around; past ten courses, sharing a
+        // colour is unavoidable and spread order keeps the sharers far apart.
+        let picks = families.count <= steps.count ? spread(families.count)
+                                                  : (0 ..< families.count).map { $0 % steps.count }
         var mapping: [String: Color] = [:]
         for (index, family) in families.enumerated() {
-            mapping[family] = steps[(index * stride) % steps.count]
+            mapping[family] = steps[picks[index]]
         }
 
         var result: [String: Color] = [:]
@@ -81,7 +93,7 @@ enum Palette {
     }
 
     static func legibleForeground(on color: Color) -> Color {
-        relativeLuminance(color) > 0.45 ? ink : paper
+        Bell.legibleOn(color)
     }
 }
 

@@ -29,6 +29,7 @@
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
@@ -38,8 +39,32 @@
 	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
 	<true/>
 
+	<key>NSCameraUsageDescription</key>
+	<string>Bell uses the camera to photograph a printed schedule and read it on device. Images are never uploaded.</string>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>Bell sets one alarm for your first class, timed from when it starts and how long the walk is.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Bell reads your latest screenshot when you ask it to, to pull out an exam or deadline. It's read on this device and never uploaded.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Bell adds your classes to a calendar and checks your other events for clashes, including ones you can't walk between in time. Nothing leaves this device.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Bell uses your location only while you're in class, to learn where campus buildings are so it can estimate walking time between them.</string>
+	<string>Bell uses your location to work out walking time to your next class, and to learn where campus buildings are while you're in them.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>To mark attendance and stop "leave now" alerts when you arrive, Bell watches only the buildings of your next classes. It never tracks your route, and nothing leaves your phone.</string>
+
+	<!-- Bell's calendar events carry a bell://occurrence/... link, so
+	     tapping it in Calendar opens that course here. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.yourteam.bell.occurrence</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>bell</string>
+			</array>
+		</dict>
+	</array>
 
 	<key>UTExportedTypeDeclarations</key>
 	<array>
@@ -61,6 +86,12 @@
 			</dict>
 		</dict>
 	</array>
+
+	<!-- Bell copies an imported file and parses the copy; it never edits
+	     the original. Saying so explicitly is what the system asks for, and
+	     false is the truthful answer. -->
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<false/>
 
 	<key>CFBundleDocumentTypes</key>
 	<array>

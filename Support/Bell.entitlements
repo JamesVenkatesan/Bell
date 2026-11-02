@@ -2,19 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!--
-	  App Groups requires a PAID Apple Developer membership.
-	  On a free account, leave this file as-is (empty dict). Bell falls back to
-	  the Events.xml compiled into both targets, and the widget works fine.
-
-	  If you have a paid account, uncomment the block below and add the same
-	  group to BellWidget.entitlements, then set SharedStore.appGroup to match.
-	-->
-	<!--
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>group.com.yourteam.bell</string>
 	</array>
-	-->
 </dict>
 </plist>

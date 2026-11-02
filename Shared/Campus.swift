@@ -66,15 +66,33 @@ enum Campus {
         return "\(Int((seconds / 60).rounded())) min walk"
     }
 
-    /// Buildings the app has seen but doesn't have coordinates for. Filled in
-    /// opportunistically when the user is in class with location available.
+    /// Positions Bell found for itself: from being in a class with an
+    /// accurate fix, or from an Apple Maps lookup the user allowed. The source
+    /// is kept because the two deserve different trust, and the Room
+    /// coordinates screen says which is which.
     final class LearnedLocations {
+        enum Source: String { case observed, lookedUp }
+
         static let shared = LearnedLocations()
         private let key = "campus.learned"
+        private let sourceKey = "campus.learned.source"
         private var cache: [String: [Double]]
+        private var sources: [String: String]
 
         private init() {
-            cache = SharedStore.defaults?.dictionary(forKey: key) as? [String: [Double]] ?? [:]
+            cache = Preferences.store?.dictionary(forKey: key) as? [String: [Double]] ?? [:]
+            sources = Preferences.store?.dictionary(forKey: sourceKey) as? [String: String] ?? [:]
+        }
+
+        func source(for building: String) -> Source? {
+            sources[building.uppercased()].flatMap(Source.init(rawValue:))
+        }
+
+        func forget(_ building: String) {
+            cache[building.uppercased()] = nil
+            sources[building.uppercased()] = nil
+            Preferences.store?.set(cache, forKey: key)
+            Preferences.store?.set(sources, forKey: sourceKey)
         }
 
         func coordinate(for building: String) -> CLLocationCoordinate2D? {
@@ -82,9 +100,14 @@ enum Campus {
             return .init(latitude: pair[0], longitude: pair[1])
         }
 
-        func record(_ coordinate: CLLocationCoordinate2D, for building: String) {
+        func record(_ coordinate: CLLocationCoordinate2D, for building: String, source: Source) {
+            // Being there beats a search result; never let a lookup overwrite
+            // a position measured in the building.
+            if source == .lookedUp, self.source(for: building) == .observed { return }
             cache[building.uppercased()] = [coordinate.latitude, coordinate.longitude]
-            SharedStore.defaults?.set(cache, forKey: key)
+            sources[building.uppercased()] = source.rawValue
+            Preferences.store?.set(cache, forKey: key)
+            Preferences.store?.set(sources, forKey: sourceKey)
         }
     }
 }

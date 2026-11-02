@@ -72,6 +72,20 @@ enum RowEmphasis {
     case active
     case upcoming
 
+    /// The one place status becomes emphasis, so the app's timeline, the
+    /// week grid and every widget dim the same classes by the same amount.
+    init(_ status: ScheduleEngine.Occurrence.Status) {
+        switch status {
+        case .finished: self = .done
+        case .inProgress: self = .active
+        case .upcoming: self = .upcoming
+        }
+    }
+
+    /// Finished classes are struck through as well as dimmed: at 34% a
+    /// tinted widget can flatten opacity, and the line survives that.
+    var isStruck: Bool { self == .done }
+
     var opacity: Double {
         switch self {
         case .done: 0.34
@@ -101,12 +115,7 @@ struct ClassRow: View {
     var emphasis: RowEmphasis?
 
     private var level: RowEmphasis {
-        if let emphasis { return emphasis }
-        switch occurrence.status(at: now) {
-        case .finished: return .done
-        case .inProgress: return .active
-        case .upcoming: return .upcoming
-        }
+        emphasis ?? RowEmphasis(occurrence.status(at: now))
     }
 
     private var isLive: Bool { occurrence.status(at: now) == .inProgress }
@@ -119,9 +128,9 @@ struct ClassRow: View {
                 Text(occurrence.event.course)
                     .font(.system(size: isCompact ? 13 : 15, weight: level.courseWeight))
                     .lineLimit(1)
-                    .strikethrough(level == .done, color: .secondary)
+                    .strikethrough(level.isStruck, color: .secondary)
 
-                if SharedStore.showsRoomNumbers, !occurrence.event.room.isEmpty {
+                if Preferences.showsRoomNumbers, !occurrence.event.room.isEmpty {
                     Text(occurrence.event.room)
                         .font(.system(size: isCompact ? 11 : 12))
                         .foregroundStyle(.secondary)
@@ -329,5 +338,53 @@ struct LeaveNowBadge: View {
         }
         .font(.system(size: 11, weight: .medium))
         .bellAccented()
+    }
+}
+
+/// The day as one horizontal strip at true scale, with a tick at now.
+///
+/// The widget version of the app's timeline: it can't scroll or be tapped
+/// into, but it can still answer "when am I free" at a glance, which is the
+/// question a list of rows doesn't. Classes keep their three-tier emphasis
+/// so the finished part of the day visibly recedes behind the tick.
+struct DayRibbon: View {
+    @Environment(\.widgetRenderingMode) private var renderingMode
+
+    var layout: DayLayout
+    var now: Date
+    var palette: [String: Color]
+    var height: CGFloat = 6
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            ZStack(alignment: .leading) {
+                Capsule().fill(.quaternary)
+
+                ForEach(layout.blocks) { block in
+                    let start = layout.fraction(for: block.occurrence.start)
+                    let end = layout.fraction(for: block.occurrence.end)
+                    let color = palette[block.occurrence.event.course] ?? Bell.Surface.scaffold
+                    Capsule()
+                        .fill(renderingMode == .fullColor ? color : Color.white)
+                        .frame(width: max(2, width * (end - start) - 1))
+                        .offset(x: width * start)
+                        .opacity(RowEmphasis(block.occurrence.status(at: now)).opacity)
+                        .bellAccented()
+                }
+
+                if now >= layout.windowStart, now <= layout.windowEnd {
+                    Capsule()
+                        .fill(Bell.Content.primary)
+                        .frame(width: 2, height: height + 6)
+                        .offset(x: width * layout.fraction(for: now) - 1)
+                        .bellAccented()
+                }
+            }
+            .frame(height: height)
+            .frame(maxHeight: .infinity)
+        }
+        .frame(height: height + 6)
+        .accessibilityHidden(true)
     }
 }

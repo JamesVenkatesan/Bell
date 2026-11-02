@@ -1,209 +1,182 @@
 # Bell
 
-A location-aware iOS timetable app. It knows your class schedule, it knows
-where you are, and it works out how long it will actually take you to get to
-your next room.
+**The next bell is the interface.**
 
-Built for a Purdue ECE schedule, on top of the standard `.timetable` export
-format — so it works for any schedule in that format, at any university.
+Bell is an iOS timetable app built around one question: *how long until I have to be somewhere?* It reads your university schedule from wherever it lives, knows how long the walk to your next room takes, and turns your day into a single number you can read from across the room.
 
----
+Open it and you see that number, huge, on a slab of your course's colour. The colour drains as the time runs out. When it hits zero, the bell rings.
 
-## What it does
-
-**Tells you how far you are from your next class, in minutes.**
-Not distance on a map. A number you can act on. The widget reads *12 min away*,
-and that figure feeds straight into when it tells you to leave.
-
-**Knows the campus.** Every room maps to a real coordinate. Walking estimates
-account for path detours, crossings, and the time it takes to get through a
-door and up a stairwell — because a straight-line number is optimistic enough
-to make you late.
-
-**Only interrupts when it matters.** A reminder that class starts at 7:30 every
-Monday is noise. An alert that *this* walk is 11 minutes and you have 10 is
-not. Bell fires the second kind and stays quiet otherwise.
-
-**Shows the whole day, not just what's left.** Finished classes stay on the
-widget, dimmed. What you're in now is brightest. What's ahead sits in between.
-The day reads as a day in progress rather than a shrinking to-do list.
-
-**Adapts to how your phone looks.** Course colours are chosen so they stay
-distinguishable whatever theme or tint you've set on your home screen.
+Everything runs on your phone. There's no account, no server and no analytics. Your schedule says where you are every hour of the week, so it never leaves the device.
 
 ---
 
-## Widgets
+## Why Bell
 
-| Size | What you get |
-|---|---|
-| Small | Current class with a progress rail, or the next one with a countdown and leave-by time |
-| Medium | Everything still ahead, with walking times between rooms |
-| Large | Featured class rendered big with live ETA, the full day below it, and when you're free |
-| Extra large | The week as a grid, today's column marked |
-| Lock screen | Rectangular, circular, and inline — countdown on your lock screen |
-| Live Activity | Runs for the length of each class; Dynamic Island shows time remaining and where you're headed next |
+Most timetable apps are calendars with a different skin. They show you *what* is happening. Bell tells you *what to do about it*.
 
-Ask Siri *"what's my next class"*, *"what's my schedule"*, or *"when am I
-free"* — the last one finds your next real gap.
+- **Leave-by, not start time.** If your next class is a ten-minute walk away, Bell counts down to when you need to leave, not to when the lecture starts.
+- **Free time at true scale.** Gaps in the day are drawn at their real length, so a forty-minute window looks like forty minutes, and your other calendars' events are folded in.
+- **It only interrupts when it matters.** "Class at 9:30" every Monday is noise. "This walk is 11 minutes and you have 10" is not. Bell sends the second kind and stays quiet otherwise.
+- **The day reads as a day in progress.** Finished classes stay visible, dimmed and struck through. The current or next class is at full weight, and the rest sit just below it.
 
 ---
 
-## Under the hood
+## Features
 
-**Timeline refreshes are scheduled, not polled.** WidgetKit budgets how often a
-widget may update, so Bell spends that budget precisely: entries are generated
-at each class start, each class end, each leave-by threshold, and midnight.
-Nothing in between. The widget never shows a stale minute mid-lecture.
+### Today
 
-**Location without a battery cost.** The widget requests a fix while iOS has it
-awake, rather than running a location manager continuously. The ETA is current
-as of the last refresh — accurate to within a few minutes, which is the
-resolution that matters for *can I still make it*.
+A hero countdown to the next bell: the next start, the next end, or the moment you should leave. The numerals are drawn twice and masked at the colour's level, so as it sinks you can see the line pass through the digits. When the bell changes while the app is open, the slab swings like a struck bell (unless you've turned on Reduce Motion).
 
-**Term-aware.** Set your first and last day and add your breaks. Outside those
-dates the widget says why it's empty instead of replaying last week forever.
+Below it is a live timeline with a moving "now" line, your morning brief, what's due soon, and gaps you can actually use.
 
-**Colours are assigned, not hashed.** Courses are sorted and spread evenly
-across a ten-step palette, so a five-course schedule gets five well-separated
-colours instead of whatever five a hash lands on. Labs inherit their lecture's
-colour.
+### Week
+
+A zoomable, scrubbable grid of the whole week. Pinch to zoom around your fingers and drag to scrub through the hours. Tap any class and it zooms open into its course page, with attendance history, upcoming work and a map of the room.
+
+### Import from anything
+
+Bell tries four readers in order of quality and uses the best one your document supports:
+
+1. **Calendar feeds (ICS).** Subscribe once and adds and drops flow in on their own. This path is exact.
+2. **Registrar PDFs.** A table reader rebuilt from the PDF's real line geometry recovers course, days, times, room and instructor.
+3. **Weekly-grid screenshots**, read with Vision, and clearly flagged as approximate.
+4. **Anything else**, read with rules and cross-checked against Apple's on-device model. Bell trusts the result based on how well two independent readers agree, not on the model's opinion of itself.
+
+Every import is shown as a diff before it's applied. A room change reads as a change, not as a delete and an add. Removals are never accepted by default, because a class the parser missed looks exactly like a class you dropped.
+
+### Inbox
+
+Share a syllabus line, an email or a screenshot to Bell, or paste or type it in. Bell pulls out the deadline, course and kind of work. Exams, finals and other must-not-miss items are added automatically and **always labelled as automatic**, so you never mistake one for something you entered yourself. Anything less certain waits in a review queue.
+
+Optionally, Bell can watch your Gmail through the same pipeline (see [Gmail](#gmail-optional)).
+
+### Daily intelligence
+
+- **Morning brief**, written as prose rather than a list. Every number in it is computed and tested in code first. The on-device model only rephrases it, and its version is used only if every time and course it mentions is in the facts.
+- **Adaptive wake-up**, set as a real alarm that sounds through silent mode, worked out from your first class and the walk to get there.
+- **Deadline pressure.** It compares the work due against the free hours you actually have before it's due.
+- **Ask your schedule.** "When am I free Thursday?" gets an exact answer, not a guess.
+- **Weekly review.**
+
+### Location
+
+- **Auto-attendance.** Arriving at the building near the start of class marks you present. It never marks you absent on its own, and it never overrides a mark you made yourself.
+- **Escalating alerts:** a heads-up, then leave now, then running late. If you leave from somewhere unexpected, the walk is re-estimated from there.
+- **Buildings resolve themselves.** Bell learns a building's position from accurate fixes taken while you're in class, or looks it up in Apple Maps.
+- **Live Activity and Dynamic Island** run for the length of each class, showing the time left and what's next.
+
+### Calendar
+
+Bell keeps your classes four weeks ahead in a calendar of its own, so they show up in every calendar app. It reads your Google, Outlook and iCloud calendars through iOS (no API keys) to find clashes, including ones caused by travel time. Delete a class from your calendar and Bell reads that as a cancellation, with a one-tap undo.
 
 ---
 
-## Install it
+## Eight widgets, eight questions
 
-You need a Mac with Xcode and an iPhone. No paid Apple Developer account
-required.
+Each widget answers exactly one question and has one focal point.
 
-### 1. Clone and generate the project
+| Widget | Size | The question |
+|---|---|---|
+| **Bell** | Small | How long until the next bell? |
+| **Behind me** | Small | How much of today is done? |
+| **Free** | Medium | Where's my free time today? |
+| **Due** | Medium | What's due soon? *(tick tasks off from the widget)* |
+| **Today** | Large | What's the rest of today? *(mark attendance from the widget)* |
+| **Week** | Large | What does this week look like? |
+| **Leave** | Lock screen, rectangular | When do I leave? |
+| **Term** | Lock screen, circular | How far through the term am I? |
+
+- **No polling.** Timeline entries are generated only at the moments something changes: each class start and end, each leave-by time, each deadline, and midnight. Countdowns tick on their own between those moments, so a widget is never a minute stale mid-lecture.
+- **Tinted mode is designed in, not bolted on.** iOS tinted mode throws away hue and keeps only brightness. Bell's course colours sit on a ten-step ramp evenly spaced in perceived lightness, so your courses stay distinguishable even when they've all been tinted the same colour. A test enforces it.
+- **Honest empty states.** No classes, on a break, out of term and no schedule yet each say so, rather than showing a blank tile or replaying last week.
+
+A gallery in **Settings** previews all eight in full colour and in tinted mode.
+
+---
+
+## Design
+
+Bell is deliberately quiet everywhere except one place.
+
+- **One loud thing.** The bell numeral, in Compressed Black, appears only in the hero. Everything else is neutral surfaces and plain type.
+- **One signal colour.** Vermilion means *now*, *urgent* or *conflict*, and nothing else.
+- **Brightness carries meaning; hue is decoration.** This started as a constraint from widget tinting and turned out to be right everywhere, because a schedule is read at a glance, at arm's length.
+- **Motion is considered.** Nothing moves linearly, there's no bounce except on arrival, and Reduce Motion is respected everywhere. Haptics come from a five-case vocabulary rather than a buzz on every tap.
+- **Accessible by default.** Text colour on every course colour is chosen by contrast ratio, numbers that change use monospaced digits so they don't jitter, keyboard focus is visible, and layouts are checked on small iPhones.
+
+The full design rationale, including the palette, type scale and the ideas that were rejected, is in [`Design/PLAN.md`](Design/PLAN.md).
+
+---
+
+## Built with
+
+SwiftUI with Liquid Glass and zoom transitions · SwiftData · WidgetKit and interactive AppIntents · ActivityKit · Foundation Models (on-device) · EventKit · Core Location (`CLMonitor`) · AlarmKit · PDFKit · Vision · MapKit
+
+There are no third-party dependencies at runtime. The project is generated with [XcodeGen](https://github.com/yonaskolb/XcodeGen).
+
+### Architecture in one paragraph
+
+The app and the widget are separate processes. SwiftData lives only in the app, and after every write the app publishes a flat JSON snapshot to the shared App Group, which is the only thing the widget reads. That keeps widget timelines fast and avoids the blank widgets SwiftData produces inside extensions. Taps on widget buttons are queued in the App Group and applied by the app. All scheduling logic is pure value types, so it can be tested without a device.
+
+### Tested
+
+**365 tests**, most of which encode a bug that really happened. They include the parsers run against real registrar PDFs and a real calendar feed, the palette's lightness spacing, the widget refresh boundaries, and every widget rendered in both colour modes.
+
+---
+
+## Getting started
+
+You need a Mac with Xcode 27 and an iPhone on iOS 26 or later. A free Apple ID is enough. You don't need a paid developer account.
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/bell.git
-cd bell
-./setup.sh
+git clone https://github.com/JamesVenkatesan/-Bell---The-Timetable-App.git
+cd -- -Bell---The-Timetable-App
+./setup.sh          # installs XcodeGen if needed, generates the project, opens Xcode
 ```
 
-`setup.sh` installs [XcodeGen](https://github.com/yonaskolb/XcodeGen) via
-Homebrew if you don't have it, builds `Bell.xcodeproj` from `project.yml`, and
-opens Xcode.
+1. **Provide a starting schedule.** The build expects `Resources/Events.xml`, which is gitignored because it's personal. Unzip a `.timetable` export into `Resources/`, or use any placeholder and import your real schedule in the app afterwards.
+2. **Signing.** Change `DEVELOPMENT_TEAM` in `project.yml` to your own team, and change the `com.yourteam` bundle identifiers to something unique. Then run `xcodegen generate`.
+3. **Run.** Try it on a simulator first, then on your phone. The first time you install on a device, turn on **Developer Mode** and trust your Apple ID under **VPN & Device Management**.
+4. **Import your schedule** from Settings: a calendar feed if your university offers one (the best option), otherwise a PDF or a screenshot.
 
-If the script won't run, `chmod +x setup.sh` first.
-
-### 2. Set your signing team
-
-In Xcode, click the blue **Bell** project icon, then for **each** of the two
-targets — `Bell` and `BellWidget` — open **Signing & Capabilities**, tick
-**Automatically manage signing**, and choose your Apple ID under Team.
-
-No team listed? Xcode → Settings → Accounts → **+** → add your Apple ID.
-
-If Xcode says the bundle identifier is unavailable, change `com.yourteam` in
-`project.yml` to something unique and regenerate. Keep the widget's identifier
-as the app's plus `.widget`.
-
-### 3. Build
-
-Pick an iPhone simulator and hit Run. Once that works, plug your phone in with
-a cable, select it as the destination, and run again.
-
-First install on a device needs two things on the phone:
-
-- **Settings → Privacy & Security → Developer Mode** → on. The phone reboots.
-- **Settings → General → VPN & Device Management** → tap your Apple ID → Trust.
-
-### 4. Add your own schedule
-
-Replace `Resources/Events.xml` with your own. Unzip a `.timetable` export:
+Run the tests with:
 
 ```bash
-unzip -o ~/Downloads/YourSchedule.timetable -d Resources/
+xcodebuild -scheme Bell -destination 'platform=iOS Simulator,name=iPhone 17' test
 ```
 
-Then set your term dates and breaks in `Shared/BundledTimetable.swift`.
+### Gmail (optional)
 
-### 5. Add your building coordinates
+Reading Gmail is the one feature that needs credentials, because Google requires an OAuth client. You create your own in Google Cloud: an iOS client with the Gmail read-only scope, with yourself added as a test user. Then paste its client ID into **Settings → Email**. Bell only ever requests read access, and it stores its tokens in the Keychain. If you'd rather skip this, sharing an email to Bell does the same job with no setup.
 
-Open `Shared/RoomCoordinates.swift`. For each building: find it in Google Maps,
-right-click the door you actually use, click the coordinates that appear at the
-top of the menu, and paste them in:
+### Free Apple account notes
 
-```swift
-"BHEE": (40.428865428011235, -86.911782029119),
-```
-
-You can key by building code or by full room (`"BHEE 162"`), and room entries
-win — useful where one building's entrances are far apart.
-
-Every walking estimate depends on these, so it's the highest-value ten minutes
-you can spend on setup. **Settings → Room coordinates** in the app shows which
-rooms are set and which are still estimated.
-
-Rebuild, and grant location access when the app asks. Without it the ETA never
-appears.
+App Groups, local notifications, geofencing, Live Activities and Foundation Models all work on a free account. Free provisioning profiles expire after seven days, so you'll need to rebuild from Xcode about once a week. Push notifications aren't available on a free account, which means a Live Activity can only start while the app is open.
 
 ---
 
-## Two things about free Apple accounts
+## Privacy
 
-**The app expires after 7 days.** Free provisioning profiles are short-lived —
-the app and its widget stop working after a week until you rebuild from Xcode.
-This is Apple's limit. Rebuilding takes about thirty seconds.
-
-**In-app import doesn't reach the widget.** App Groups requires a paid
-membership, and without it the widget can't read anything the app saves. Bell
-works around this by compiling the same `Events.xml` into both targets — which
-is why changing your schedule means replacing that file and rebuilding rather
-than importing in the app.
-
-A $99/year membership removes both. If you have one, uncomment the App Groups
-block in `Support/Bell.entitlements`, add the same group to
-`BellWidget.entitlements`, and set `SharedStore.appGroup` to match.
+- No account, no backend and no analytics.
+- Schedule parsing and every AI feature run on device, using Apple's Foundation Models.
+- Your other calendars are read into memory only. They're never stored, and never written into the widget snapshot.
+- Your real schedule files, measured building coordinates and test fixtures are all gitignored.
 
 ---
 
 ## Project layout
 
 ```
-project.yml                the Xcode project definition
-setup.sh                   generate and open
-Resources/Events.xml       your schedule, compiled into both targets
-Support/                   Info.plists and entitlements
-
-Shared/                    compiled into both app and widget
-  Models.swift             ClassEvent, TaskEvent, Timetable
-  TimetableImporter.swift  ZIP + property list decoding
-  BundledTimetable.swift   term dates and breaks
-  ScheduleEngine.swift     dated occurrences, gaps, leave times, refresh points
-  Campus.swift             building coordinates and walking estimates
-  LocationProvider.swift   live position and ETA
-  RoomCoordinates.swift    your coordinates — edit this one
-  Palette.swift            colour assignment
-  SharedStore.swift        storage, with bundle fallback
-  ClassActivity.swift      Live Activity and Dynamic Island
-  Notifier.swift           notification scheduling
-  WidgetComponents.swift   shared views
-
-BellApp/                   day rail, week view, settings, Siri intents
-BellWidget/                timeline provider and every widget family
+Shared/
+  Domain/        pure schedule logic: engine, next bell, free time, diffs
+  Capture/       PDF, ICS, grid and model readers (app only)
+  Persistence/   SwiftData store and the widget snapshot
+  Widgets/       widget model, actions and all eight views
+  Design/        tokens, motion and haptics
+BellApp/         Today, Week, Course, Inbox, Calendar, Intelligence,
+                 Location, Email, Onboarding, Settings
+BellWidget/      timeline provider and widget bundle
+BellShare/       share extension
+BellTests/       365 tests
+Design/PLAN.md   the design system and why
 ```
-
----
-
-## Roadmap
-
-- **iCalendar import.** UniTime, the system behind Purdue's schedule export,
-  publishes a subscribable `.ics` URL. Subscribing rather than importing means
-  add/drops and published exam times flow in on their own.
-- **Campus-wide coordinates.** A bundled building database plus geocoding
-  fallback, so new rooms resolve without editing a source file.
-- **Exams and deadlines.** The model already carries `TaskEvent`; nothing
-  surfaces it yet.
-
----
-
-## Requirements
-
-iOS 17+ · Xcode 16+ · macOS with Homebrew
-
-Live Activities need iOS 16.2, Control Centre widgets need iOS 18.

@@ -2,16 +2,17 @@ name: Bell
 options:
   bundleIdPrefix: com.yourteam
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "26.0"
   createIntermediateGroups: true
   groupSortPosition: top
 
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    # Replace with your Apple ID's team, or leave blank and pick it in Xcode's
-    # Signing & Capabilities tab after generating.
-    DEVELOPMENT_TEAM: ""
+    # Baked in so regenerating the project stops wiping the signing team.
+    # This is a free personal team: App Groups and Background Modes work,
+    # push notifications and TestFlight do not, and builds expire after 7 days.
+    DEVELOPMENT_TEAM: "M862PL886J"
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "1.0"
     CURRENT_PROJECT_VERSION: "1"
@@ -42,15 +43,30 @@ targets:
     dependencies:
       - target: BellWidget
         embed: true
+      - target: BellShare
+        embed: true
 
   BellWidget:
     type: app-extension
     platform: iOS
     sources:
+      # The widget gets the domain, the design system and the snapshot reader,
+      # but deliberately NOT the SwiftData layer. A timeline build is a cold
+      # start on a tight budget: it reads the flat snapshot the app already
+      # wrote and never opens a database.
       - path: Shared
+        excludes:
+          - "Persistence/BellStore.swift"
+          - "Persistence/Records.swift"
+          - "Persistence/LegacyMigration.swift"
+          # Importing is an app concern. Keeping Vision, PDFKit and
+          # FoundationModels out of the extension keeps it small and its
+          # launch fast, which is the entire budget a timeline build has.
+          - "Capture"
+          - "Inbox"
       - path: BellWidget
-      # The same schedule file is compiled into the extension, which is what
-      # lets the widget read it without an App Group.
+      # Seed copy, so a widget on a device that has never opened the app
+      # still has something to show.
       - path: Resources/Events.xml
         buildPhase: resources
       - path: Resources/Assets.xcassets
@@ -64,13 +80,57 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         SKIP_INSTALL: YES
 
+  BellShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      # Deliberately tiny: the extension queues what was shared and exits.
+      # Reading it (Vision, the language model) happens in the app, where
+      # there's memory to do it without the system killing the extension
+      # halfway and losing what the user shared.
+      - path: BellShare
+      - path: Shared/Inbox/CaptureQueue.swift
+      - path: Shared/Persistence/AppGroup.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yourteam.bell.share
+        INFOPLIST_FILE: Support/BellShare-Info.plist
+        CODE_SIGN_ENTITLEMENTS: Support/BellShare.entitlements
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES
+
+  BellTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: BellTests
+        excludes:
+          - "Fixtures"
+      # Real registrar PDFs, so a test proves what PDFKit actually produces
+      # rather than what a hand-written string assumes it does.
+      - path: BellTests/Fixtures
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yourteam.bell.tests
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: Bell
+
 schemes:
   Bell:
     build:
       targets:
         Bell: all
         BellWidget: all
+        BellShare: all
+        BellTests: [test]
     run:
       config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: true
+      targets:
+        - BellTests
     archive:
       config: Release

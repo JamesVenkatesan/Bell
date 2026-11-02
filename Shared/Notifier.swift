@@ -9,17 +9,25 @@ enum Notifier {
 
     static func requestAuthorization() async {
         _ = try? await UNUserNotificationCenter.current()
-            .requestAuthorization(options: [.alert, .sound, .timeSensitive])
+            .requestAuthorization(options: [.alert, .sound])
     }
 
     /// Rebuilt from scratch whenever the timetable changes. iOS caps pending
     /// requests at 64, so we schedule a rolling window rather than the term.
-    static func rescheduleAll(using engine: ScheduleEngine) async {
+    /// - Parameter extra: requests built by the app (the morning brief, the
+    ///   weekly review), which needs code the widget target doesn't have.
+    ///   They go in first so the 64-request cap never drops them in favour
+    ///   of a seventh day of class reminders.
+    /// - Parameter coveredKeys: classes the app's escalating alerts already
+    ///   cover. Their plain reminder is skipped, or the same departure would
+    ///   be announced twice; every other class keeps its reminder.
+    static func rescheduleAll(using engine: ScheduleEngine, extra: [UNNotificationRequest] = [],
+                              coveredKeys: Set<String> = []) async {
         let center = UNUserNotificationCenter.current()
         center.removeAllPendingNotificationRequests()
 
-        var requests: [UNNotificationRequest] = []
-        let buffer = TimeInterval(SharedStore.leaveBuffer * 60)
+        var requests: [UNNotificationRequest] = Array(extra.prefix(30))
+        let buffer = TimeInterval(Preferences.leaveBuffer * 60)
 
         for offset in 0 ..< 7 {
             guard let day = Calendar.current.date(byAdding: .day, value: offset, to: .now)
@@ -28,6 +36,7 @@ enum Notifier {
             let today = engine.occurrences(on: day)
 
             for (index, occurrence) in today.enumerated() {
+                if coveredKeys.contains(occurrence.key) { continue }
                 let previous = index > 0 ? today[index - 1] : nil
 
                 // First class of the day: a plain start reminder.

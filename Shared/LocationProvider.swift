@@ -1,4 +1,5 @@
 import CoreLocation
+import os
 
 /// Where you are, from inside the widget.
 ///
@@ -11,12 +12,17 @@ import CoreLocation
 /// second. Since timelines rebuild at every class boundary and whenever iOS
 /// grants a refresh, in practice it's current within a few minutes — which is
 /// the resolution that matters for "can I still make it".
-final class LocationProvider: NSObject, CLLocationManagerDelegate {
+final class LocationProvider: NSObject, CLLocationManagerDelegate, @unchecked Sendable {
 
     static let shared = LocationProvider()
 
     private let manager = CLLocationManager()
-    private var pending: CheckedContinuation<CLLocation?, Never>?
+
+    /// Guards `pending`. The delegate callback and the timeout task run on
+    /// different threads and both try to finish the same request — without
+    /// this, both can pass a `nil` check and resume the continuation twice,
+    /// which is a fatal error in Swift rather than a recoverable one.
+    private let pending = OSAllocatedUnfairLock<CheckedContinuation<CLLocation?, Never>?>(initialState: nil)
 
     private override init() {
         super.init()
@@ -37,29 +43,40 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
             return cached
         }
 
+        // A second caller while one is in flight would orphan the first
+        // continuation and hang it forever. Serialise instead.
+        // Scoped locking: `NSLock` can't be held across an `await`, and
+        // Swift 6 rejects it in async code outright.
+        if pending.withLock({ $0 != nil }) { return manager.location }
+
         return await withCheckedContinuation { continuation in
-            pending = continuation
+            pending.withLock { $0 = continuation }
+
             manager.requestLocation()
 
-            Task {
+            Task { [weak self] in
                 try? await Task.sleep(for: .seconds(timeout))
-                self.resume(with: self.manager.location)
+                guard let self else { return }
+                self.finish(with: self.manager.location)
             }
         }
     }
 
-    private func resume(with location: CLLocation?) {
-        guard let continuation = pending else { return }
-        pending = nil
-        continuation.resume(returning: location)
+    /// Resumes the pending continuation exactly once, whoever gets here first.
+    private func finish(with location: CLLocation?) {
+        let continuation = pending.withLock { current -> CheckedContinuation<CLLocation?, Never>? in
+            defer { current = nil }
+            return current
+        }
+        continuation?.resume(returning: location)
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        resume(with: locations.last)
+        finish(with: locations.last)
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        resume(with: manager.location)
+        finish(with: manager.location)
     }
 }
 

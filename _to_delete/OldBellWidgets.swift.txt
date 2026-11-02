@@ -1,0 +1,507 @@
+import SwiftUI
+import WidgetKit
+
+// MARK: - Bundle
+
+@main
+struct BellWidgetBundle: WidgetBundle {
+    var body: some Widget {
+        NextClassWidget()
+        TodayWidget()
+        WeekWidget()
+        if #available(iOS 16.2, *) {
+            ClassLiveActivity()
+        }
+    }
+}
+
+// MARK: - Small + accessory: what's next
+
+struct NextClassWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "com.yourteam.bell.next", provider: ScheduleProvider()) { entry in
+            NextClassView(entry: entry)
+                .containerBackground(Bell.Surface.canvas.gradient, for: .widget)
+        }
+        .configurationDisplayName("Next class")
+        .description("The class you're in, or the one you're walking to.")
+        .supportedFamilies([
+            .systemSmall,
+            .accessoryRectangular, .accessoryCircular, .accessoryInline,
+        ])
+    }
+}
+
+struct NextClassView: View {
+    @Environment(\.widgetFamily) private var family
+    var entry: ScheduleEntry
+
+    var body: some View {
+        switch family {
+        case .accessoryInline: inlineBody
+        case .accessoryCircular: circularBody
+        case .accessoryRectangular: rectangularBody
+        default: smallBody
+        }
+    }
+
+    // Home screen small.
+    @ViewBuilder private var smallBody: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let reason = entry.quietReason {
+                QuietState(headline: reason, detail: nextDayHint, symbol: "moon.zzz")
+            } else if let current = entry.current {
+                header("In class")
+                Text(current.event.course)
+                    .font(Bell.Type_.title)
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
+                Text(current.event.room)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+
+                Spacer(minLength: 6)
+
+                ProgressRail(progress: current.progress(at: entry.date),
+                             color: color(for: current))
+                    .padding(.bottom, 5)
+
+                HStack {
+                    Text("Ends \(current.end, style: .relative)")
+                    Spacer()
+                }
+                .font(Bell.Type_.micro)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+
+            } else if let next = entry.next {
+                header(dayLabel(for: next.start))
+                Text(next.event.course)
+                    .font(Bell.Type_.title)
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
+                Text(next.event.room)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+
+                Spacer(minLength: 6)
+
+                Text(next.start, style: .relative)
+                    .font(Bell.Type_.data(15))
+
+                if let leaveBy = entry.leaveBy {
+                    LeaveNowBadge(leaveBy: leaveBy, walkNote: entry.walkNote, now: entry.date)
+                        .padding(.top, 2)
+                }
+            } else {
+                QuietState(headline: "Nothing left today", detail: nextDayHint, symbol: "checkmark")
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+
+    // Lock screen: one line, no decoration.
+    @ViewBuilder private var inlineBody: some View {
+        if let current = entry.current {
+            Text("\(current.event.course) · ends \(current.end, style: .relative)")
+        } else if let next = entry.next {
+            Text("\(next.event.course) · \(next.start, format: .dateTime.hour().minute())")
+        } else {
+            Text(entry.quietReason ?? "No more classes")
+        }
+    }
+
+    // Lock screen circular: a ring that fills through the current class.
+    private var circularBody: some View {
+        Gauge(value: entry.current?.progress(at: entry.date) ?? 0) {
+            Image(systemName: "graduationcap.fill")
+        } currentValueLabel: {
+            Text(shortCode)
+                .font(.system(size: 11, weight: .semibold))
+                .minimumScaleFactor(0.6)
+        }
+        .gaugeStyle(.accessoryCircular)
+    }
+
+    @ViewBuilder private var rectangularBody: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            if let current = entry.current {
+                Text("Now · \(current.event.room)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                Text(current.event.course).font(.system(size: 15, weight: .semibold))
+                Text("Ends \(current.end, style: .relative)")
+            } else if let next = entry.next {
+                Text(dayLabel(for: next.start))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                Text(next.event.course).font(.system(size: 15, weight: .semibold))
+                Text("\(next.event.room) · \(next.start, style: .relative)")
+            } else {
+                Text(entry.quietReason ?? "Nothing left today")
+            }
+        }
+        .font(.system(size: 12))
+        .monospacedDigit()
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: Helpers
+
+    private var shortCode: String {
+        let course = entry.current?.event.course ?? entry.next?.event.course ?? "—"
+        return course.split(separator: " ").last.map(String.init) ?? course
+    }
+
+    private var nextDayHint: String? {
+        guard let next = entry.next else { return nil }
+        return "\(next.event.course) \(dayLabel(for: next.start).lowercased())"
+    }
+
+    private func header(_ text: String) -> some View {
+        Text(text)
+            .font(Bell.Type_.micro)
+            .foregroundStyle(.secondary)
+            .padding(.bottom, Bell.Space.hair)
+    }
+
+    private func color(for occurrence: ScheduleEngine.Occurrence) -> Color {
+        entry.palette[occurrence.event.course] ?? Bell.Surface.scaffold
+    }
+
+    private func dayLabel(for date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) { return "Next" }
+        if calendar.isDateInTomorrow(date) { return "Tomorrow" }
+        return date.formatted(.dateTime.weekday(.wide))
+    }
+}
+
+// MARK: - Medium + large: the rest of today
+
+struct TodayWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "com.yourteam.bell.today", provider: ScheduleProvider()) { entry in
+            TodayView(entry: entry)
+                .containerBackground(Bell.Surface.canvas.gradient, for: .widget)
+        }
+        .configurationDisplayName("Today")
+        .description("Everything still ahead of you, with walking times between rooms.")
+        .supportedFamilies([.systemMedium, .systemLarge])
+    }
+}
+
+struct TodayView: View {
+    @Environment(\.widgetFamily) private var family
+    var entry: ScheduleEntry
+
+    /// The class the eye should land on first: what you're in, or what's next
+    /// if it's still today. Tomorrow's first class doesn't get the big
+    /// treatment — at 9pm that's not what you need shouting at you.
+    private var featured: ScheduleEngine.Occurrence? {
+        if let current = entry.current { return current }
+        guard let next = entry.next,
+              Calendar.current.isDate(next.start, inSameDayAs: entry.date)
+        else { return nil }
+        return next
+    }
+
+    private var listed: [ScheduleEngine.Occurrence] {
+        entry.today.filter { $0.id != featured?.id }
+    }
+
+    private var rowLimit: Int { family == .systemLarge ? 5 : 3 }
+
+    private var layout: DayLayout {
+        DayLayout(occurrences: entry.today, walkSeconds: Campus.walkingSeconds)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+
+            if let reason = entry.quietReason {
+                QuietState(headline: reason, detail: hint, symbol: "moon.zzz")
+            } else if entry.today.isEmpty {
+                QuietState(headline: "Nothing scheduled", detail: hint, symbol: "circle.dotted")
+            } else if family == .systemLarge {
+                largeBody
+            } else {
+                mediumBody
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    // MARK: Header
+
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(entry.date, format: .dateTime.weekday(.wide))
+                .font(Bell.Type_.headline.weight(.semibold))
+            Text(entry.date, format: .dateTime.month(.abbreviated).day())
+                .font(Bell.Type_.caption)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            if !entry.today.isEmpty {
+                Text(dayProgress)
+                    .font(Bell.Type_.data(11))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.bottom, 9)
+    }
+
+    /// "2 of 5 done" reads faster than a count of what's left, and it's the
+    /// number that tells you how much of the day is behind you.
+    private var dayProgress: String {
+        "\(entry.finished.count) of \(entry.today.count) done"
+    }
+
+    // MARK: Large
+    //
+    // The space breaks into three bands: the featured class, a hairline, then
+    // the rest of the day. Finished classes stay in that list, dimmed, so the
+    // widget reads as a day in progress rather than a shrinking to-do list.
+
+    private var largeBody: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let featured {
+                FeaturedClass(
+                    occurrence: featured,
+                    color: entry.palette[featured.event.course] ?? Bell.Surface.scaffold,
+                    now: entry.date,
+                    isLive: featured.status(at: entry.date) == .inProgress,
+                    etaMinutes: featured.id == entry.next?.id ? entry.etaMinutes : nil,
+                    leaveBy: featured.id == entry.next?.id ? entry.leaveBy : nil)
+                .padding(.bottom, 11)
+
+                Rectangle()
+                    .fill(.quaternary)
+                    .frame(height: 0.5)
+                    .padding(.bottom, 9)
+            }
+
+            let window = RowWindow.select(listed, now: entry.date, limit: rowLimit)
+
+            if listed.isEmpty {
+                Text(featured == nil ? "Done for the day" : "Nothing else today")
+                    .font(Bell.Type_.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                if window.hiddenEarlier > 0 {
+                    Text("\(window.hiddenEarlier) earlier")
+                        .font(Bell.Type_.micro)
+                        .foregroundStyle(.tertiary)
+                        .padding(.bottom, Bell.Space.tight)
+                }
+                VStack(spacing: Bell.Space.snug) {
+                    ForEach(window.rows) { occurrence in
+                        ClassRow(
+                            occurrence: occurrence,
+                            color: entry.palette[occurrence.event.course] ?? Bell.Surface.scaffold,
+                            now: entry.date,
+                            isCompact: true)
+                    }
+                }
+            }
+
+            if window.hiddenLater > 0 {
+                Text("+\(window.hiddenLater) more")
+                    .font(Bell.Type_.micro)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, Bell.Space.tight)
+            }
+
+            Spacer(minLength: Bell.Space.snug)
+
+            DayRibbon(layout: layout, now: entry.date, palette: entry.palette)
+                .padding(.bottom, Bell.Space.snug)
+
+            footer
+        }
+    }
+
+    /// One line that answers "when am I actually free". Worth the space
+    /// because it's the question the grid above doesn't answer at a glance.
+    @ViewBuilder private var footer: some View {
+        if let last = entry.today.last, last.end > entry.date {
+            HStack(spacing: 4) {
+                Image(systemName: "moon")
+                    .font(.system(size: 10))
+                Text("Free from \(last.end, format: .dateTime.hour().minute())")
+            }
+            .font(.system(size: 11))
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
+            .bellAccented()
+        } else if let next = entry.next {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.turn.down.right")
+                    .font(.system(size: 10))
+                Text(nextDayLabel(for: next.start))
+                Text(next.event.course).fontWeight(.medium)
+                Text(next.start, format: .dateTime.hour().minute())
+            }
+            .font(.system(size: 11))
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
+            .bellAccented()
+        }
+    }
+
+    // MARK: Medium
+
+    private var mediumBody: some View {
+        VStack(spacing: 7) {
+            DayRibbon(layout: layout, now: entry.date, palette: entry.palette, height: 4)
+                .padding(.bottom, Bell.Space.hair)
+
+            if entry.upcoming.isEmpty {
+                QuietState(headline: "Done for the day", detail: hint, symbol: "checkmark")
+            } else {
+                ForEach(RowWindow.select(entry.today, now: entry.date, limit: rowLimit).rows) { occurrence in
+                    ClassRow(
+                        occurrence: occurrence,
+                        color: entry.palette[occurrence.event.course] ?? Bell.Surface.scaffold,
+                        now: entry.date,
+                        isCompact: true)
+                }
+            }
+        }
+    }
+
+    // MARK: Helpers
+
+    private var hint: String? {
+        guard let next = entry.next else { return nil }
+        return "\(nextDayLabel(for: next.start))\(next.event.course) at "
+            + next.start.formatted(.dateTime.hour().minute())
+    }
+
+    private func nextDayLabel(for date: Date) -> String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) { return "" }
+        if calendar.isDateInTomorrow(date) { return "Tomorrow · " }
+        return date.formatted(.dateTime.weekday(.abbreviated)) + " · "
+    }
+}
+
+// MARK: - Extra large: the week grid
+
+struct WeekWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: "com.yourteam.bell.week", provider: ScheduleProvider()) { entry in
+            WeekGridView(entry: entry)
+                .containerBackground(Bell.Surface.canvas.gradient, for: .widget)
+        }
+        .configurationDisplayName("Week")
+        .description("The whole week as a grid, with today's column marked.")
+        .supportedFamilies([.systemExtraLarge])
+    }
+}
+
+struct WeekGridView: View {
+    var entry: ScheduleEntry
+
+    private var engine: ScheduleEngine { ScheduleEngine(timetable: SnapshotCache.read()) }
+    private var dayCount: Int { SnapshotCache.read().showsWeekends ? 7 : 5 }
+
+    private var weekStart: Date {
+        let calendar = Calendar.current
+        let index = engine.mondayBasedIndex(for: entry.date)
+        return calendar.date(byAdding: .day, value: -index,
+                             to: calendar.startOfDay(for: entry.date)) ?? entry.date
+    }
+
+    /// Same geometry as the app's week screen, scaled to fit rather than
+    /// zoomed, so the widget and the app agree on where 7:30 sits.
+    private func geometry(in size: CGSize) -> WeekGridGeometry {
+        var geometry = WeekGridGeometry(events: SnapshotCache.read().events,
+                                        dayCount: dayCount,
+                                        columnsWidth: size.width - 34)
+        let hours = Double(geometry.endSecond - geometry.startSecond) / 3600
+        geometry.pointsPerHour = max(1, (size.height - 22) / max(1, hours))
+        return geometry
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let grid = geometry(in: proxy.size)
+
+            ZStack(alignment: .topLeading) {
+                hourRules(grid)
+
+                ForEach(0 ..< dayCount, id: \.self) { offset in
+                    let day = Calendar.current.date(byAdding: .day, value: offset, to: weekStart)!
+                    let isToday = Calendar.current.isDateInToday(day)
+
+                    Text(day, format: .dateTime.weekday(.abbreviated))
+                        .font(Bell.Type_.micro.weight(isToday ? .bold : .regular))
+                        .foregroundStyle(isToday ? .primary : .secondary)
+                        .frame(width: grid.columnWidth)
+                        .offset(x: 34 + grid.x(forDay: offset))
+
+                    ForEach(engine.occurrences(on: day)) { occurrence in
+                        let frame = grid.frame(for: placed(occurrence.event, inColumn: offset))
+                        block(occurrence, isToday: isToday)
+                            .frame(width: frame.width - 3, height: max(14, frame.height))
+                            .offset(x: 34 + frame.x, y: 22 + frame.y)
+                    }
+                }
+            }
+        }
+    }
+
+    private func placed(_ event: ClassEvent, inColumn column: Int) -> ClassEvent {
+        var event = event
+        event.dayIndex = column
+        return event
+    }
+
+    private func block(_ occurrence: ScheduleEngine.Occurrence, isToday: Bool) -> some View {
+        let color = entry.palette[occurrence.event.course] ?? Bell.Surface.scaffold
+        return RoundedRectangle(cornerRadius: 5, style: .continuous)
+            .fill(color.opacity(isToday ? 0.95 : 0.55))
+            .opacity(isToday ? RowEmphasis(occurrence.status(at: entry.date)).opacity : 1)
+            .overlay(alignment: .topLeading) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(occurrence.event.course)
+                        .font(.system(size: 10, weight: .semibold))
+                        .lineLimit(1)
+                    Text(occurrence.event.room)
+                        .font(.system(size: 9))
+                        .lineLimit(1)
+                        .opacity(0.75)
+                }
+                .foregroundStyle(Palette.legibleForeground(on: color))
+                .padding(.horizontal, 4)
+                .padding(.top, 2)
+            }
+            .bellAccented()
+    }
+
+    private func hourRules(_ grid: WeekGridGeometry) -> some View {
+        ForEach(grid.hours, id: \.self) { hour in
+            HStack(spacing: Bell.Space.tight) {
+                Text(hourLabel(hour))
+                    .font(Bell.Type_.data(9, weight: .regular))
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 30, alignment: .trailing)
+                Rectangle()
+                    .fill(.quaternary)
+                    .frame(height: Bell.Stroke.hair)
+            }
+            .offset(y: 22 + grid.y(forSecond: hour * 3600))
+        }
+    }
+
+    private func hourLabel(_ hour: Int) -> String {
+        let normalized = hour % 12 == 0 ? 12 : hour % 12
+        return "\(normalized)\(hour < 12 ? "a" : "p")"
+    }
+}
