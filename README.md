@@ -129,8 +129,8 @@ The app and the widget are separate processes. SwiftData lives only in the app, 
 You need a Mac with Xcode 27 and an iPhone on iOS 26 or later. A free Apple ID is enough. You don't need a paid developer account.
 
 ```bash
-git clone https://github.com/JamesVenkatesan/-Bell---The-Timetable-App.git
-cd -- -Bell---The-Timetable-App
+git clone https://github.com/JamesVenkatesan/Bell-Timetable-App.git
+cd Bell-Timetable-App
 ./setup.sh          # installs XcodeGen if needed, generates the project, opens Xcode
 ```
 
