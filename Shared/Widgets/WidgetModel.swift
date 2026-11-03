@@ -31,12 +31,31 @@ struct WidgetModel {
     var term: TermProgress?
     /// A class that ended in the last three hours and hasn't been marked.
     var attendancePrompt: ScheduleEngine.Occurrence?
+    /// Open tasks due today, earliest first, including any whose time has
+    /// already passed (due at 9am and not done is still today's problem).
+    /// The warned exam is left out; it has its own place.
+    var dueToday: [TaskEvent] = []
+    /// The nearest exam in the next seven days.
+    var exam: ExamWarning?
+    /// When Notion last synced, if it's connected; nil otherwise.
+    var notionSyncedAt: Date?
+
+    /// Notion data old enough that a widget should say so.
+    var notionIsStale: Bool {
+        notionSyncedAt.map { NotionFreshness.isStale($0, now: date, maxAge: NotionFreshness.widgetMaxAge) } ?? false
+    }
 
     var finished: [ScheduleEngine.Occurrence] { today.filter { $0.end <= date } }
     var lastEnd: Date? { today.map(\.end).max() }
 
     func color(for occurrence: ScheduleEngine.Occurrence) -> Color {
         palette[occurrence.event.course] ?? Bell.Surface.scaffold
+    }
+
+    /// A task's course colour; nil for an uncategorised task, which gets an
+    /// outline instead of a borrowed colour.
+    func color(forCourse course: String?) -> Color? {
+        course.flatMap { palette[$0] }
     }
 
     /// The longest free stretch still ahead today.
@@ -51,6 +70,7 @@ struct WidgetModel {
                       leaveBuffer: Int,
                       completedTasks: Set<UUID>,
                       markedAttendance: Set<String>,
+                      notionSyncedAt: Date? = nil,
                       now: Date,
                       walkSeconds: (String?, String?) -> TimeInterval = Campus.walkingSeconds) -> WidgetModel {
         let engine = ScheduleEngine(timetable: timetable)
@@ -94,6 +114,14 @@ struct WidgetModel {
                 && !markedAttendance.contains(attendanceKey(course: occurrence.event.course, start: occurrence.start))
         }
 
+        let pending = timetable.tasks.filter { !$0.isDone && !completedTasks.contains($0.id) }
+        let exam = ExamWarning.nearest(in: pending, now: now, calendar: calendar)
+        let dueToday = pending
+            .filter { calendar.isDate($0.due, inSameDayAs: now) && $0.id != exam?.task.id }
+            // Timed deadlines in order, then the all-day ones: "by 5pm"
+            // matters before "sometime today".
+            .sorted { ($0.allDay ? 1 : 0, $0.due) < ($1.allDay ? 1 : 0, $1.due) }
+
         return WidgetModel(
             date: now,
             quiet: quiet,
@@ -108,7 +136,10 @@ struct WidgetModel {
             weekStart: weekStart,
             week: week,
             term: TermProgress.make(timetable: timetable, engine: engine, now: now),
-            attendancePrompt: prompt)
+            attendancePrompt: prompt,
+            dueToday: dueToday,
+            exam: exam,
+            notionSyncedAt: notionSyncedAt)
     }
 
     /// The same identity `AttendanceRecord` uses.

@@ -91,7 +91,7 @@ struct TodayScreen: View {
                                       onReview: showsReviewLink ? { open(.review) } : nil)
                             if !dueSoon.isEmpty {
                                 VStack(alignment: .leading, spacing: Bell.Space.snug) {
-                                    Text("Due soon")
+                                    Text("Coming up")
                                         .font(Bell.Type_.headline)
                                         .foregroundStyle(Bell.Content.primary)
                                     ForEach(dueSoon) { task in
@@ -160,6 +160,13 @@ struct TodayScreen: View {
         let cancelled = store.engine.cancelledOccurrences(on: selectedDay)
         let conflicts = ConflictDetector.conflicts(classes: occurrences, events: busy,
                                                    walkSeconds: Campus.walkingSeconds)
+        // Open work due this day. Timed exams with an end take their time on
+        // the timeline; everything else is a deadline at a point.
+        let dueThisDay = store.timetable.tasks.filter { !$0.isDone && calendar.isDate($0.due, inSameDayAs: selectedDay) }
+        let timedExams = dueThisDay.filter { task in
+            task.kind == .exam && !task.allDay && (task.end.map { $0 > task.due } ?? false)
+        }
+        let points = dueThisDay.filter { task in !timedExams.contains { $0.id == task.id } }
 
         if !conflicts.isEmpty {
             ConflictList(conflicts: conflicts)
@@ -171,14 +178,30 @@ struct TodayScreen: View {
             DayQuiet(headline: "Outside term",
                      detail: "Term dates are set in Settings.",
                      symbol: "calendar.badge.minus")
-        } else if occurrences.isEmpty && busy.isEmpty {
-            DayQuiet(headline: cancelled.isEmpty ? "Nothing scheduled" : "Everything's cancelled",
-                     detail: nil, symbol: "circle.dotted")
+        } else if occurrences.isEmpty && busy.isEmpty && timedExams.isEmpty {
+            if dueThisDay.isEmpty {
+                DayQuiet(headline: cancelled.isEmpty ? "Nothing scheduled" : "Everything's cancelled",
+                         detail: nil, symbol: "circle.dotted")
+            } else {
+                // No classes, but work is due: the day is its deadlines.
+                DeadlineList(title: "Due this day", tasks: points.sorted { $0.due < $1.due },
+                             palette: store.palette, done: markDone)
+            }
         } else {
             let layout = DayLayout(occurrences: occurrences,
                                    busy: busy,
+                                   exams: timedExams,
                                    calendar: calendar,
                                    walkSeconds: Campus.walkingSeconds)
+            let deadlines = layout.deadlines(points)
+            if !deadlines.allDay.isEmpty {
+                DeadlineList(title: isToday ? "Due today" : "Due this day", tasks: deadlines.allDay,
+                             palette: store.palette, done: markDone)
+            }
+            if !deadlines.before.isEmpty {
+                DeadlineList(title: "Before your first class", tasks: deadlines.before,
+                             palette: store.palette, done: markDone)
+            }
             // Overlaps outrank travel clashes: two places at once is worse
             // than arriving late.
             let worst = Dictionary(conflicts.map { ($0.occurrence.id, $0) }) { a, b in
@@ -191,6 +214,7 @@ struct TodayScreen: View {
                             hero: hero,
                             conflicts: worst,
                             suggestions: suggestions(for: layout),
+                            deadlines: deadlines.marks,
                             open: open)
             }
             .onAppear {
@@ -203,6 +227,10 @@ struct TodayScreen: View {
                 // are in and the next one are both on screen without
                 // scrolling, which is what opening the app is for.
                 proxy.scrollTo(DayTimeline.nowAnchor, anchor: UnitPoint(x: 0, y: 0.33))
+            }
+            if !deadlines.after.isEmpty {
+                DeadlineList(title: "After your last class", tasks: deadlines.after,
+                             palette: store.palette, done: markDone)
             }
         }
 
@@ -312,10 +340,16 @@ struct TodayScreen: View {
 
     private var pendingCount: Int { store.inbox.filter { $0.state == .pending }.count }
 
+    private func markDone(_ task: TaskEvent) {
+        withAnimation(Bell.Motion.standard) { store.setTaskDone(true, id: task.id) }
+        Haptic.confirm.play()
+    }
+
     /// Work due in the next three days, above the timeline. Three because
-    /// that's the horizon where "due" changes what you do today.
+    /// that's the horizon where "due" changes what you do today. Today's own
+    /// deadlines are left out: they're drawn in the day itself, at their time.
     private var dueSoon: [TaskEvent] {
-        let start = calendar.startOfDay(for: .now)
+        let start = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: .now)) ?? .now
         let horizon = calendar.date(byAdding: .day, value: 3, to: start) ?? start
         return store.timetable.tasks
             .filter { !$0.isDone && $0.due >= start && $0.due < horizon }
@@ -623,6 +657,66 @@ private struct CancelledList: View {
                         .buttonStyle(.glass)
                 }
                 .font(Bell.Type_.body)
+            }
+        }
+    }
+}
+
+/// Deadlines that don't sit on the timeline: all-day ones, ones before the
+/// first class or after the last, or a whole day of them with no classes.
+/// Each row says which class it belongs to, and ticks off in place.
+struct DeadlineList: View {
+    var title: String
+    var tasks: [TaskEvent]
+    var palette: [String: Color]
+    var done: (TaskEvent) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Bell.Space.snug) {
+            Text(title)
+                .font(Bell.Type_.headline)
+                .foregroundStyle(Bell.Content.primary)
+            ForEach(tasks) { task in
+                HStack(spacing: Bell.Space.base) {
+                    Button { done(task) } label: {
+                        Image(systemName: "circle")
+                            .font(.system(size: 20, weight: .regular))
+                            .foregroundStyle(task.kind == .exam ? Bell.Signal.now : Bell.Content.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Mark \(task.title) done")
+                    VStack(alignment: .leading, spacing: Bell.Space.hair) {
+                        HStack(spacing: Bell.Space.tight) {
+                            Image(systemName: task.kind.symbol)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(task.kind == .exam ? Bell.Signal.now : Bell.Content.secondary)
+                            Text(task.title)
+                                .font(Bell.Type_.body.weight(.semibold))
+                                .foregroundStyle(Bell.Content.primary)
+                                .lineLimit(2)
+                        }
+                        HStack(spacing: Bell.Space.tight) {
+                            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                .fill(task.course.flatMap { palette[$0] } ?? .clear)
+                                .overlay {
+                                    if task.course.flatMap({ palette[$0] }) == nil {
+                                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                                            .strokeBorder(Bell.Content.tertiary,
+                                                          style: StrokeStyle(lineWidth: 1, dash: [2, 1.5]))
+                                    }
+                                }
+                                .frame(width: 5, height: 12)
+                            Text(task.course ?? "Uncategorised")
+                                .font(Bell.Type_.caption)
+                                .foregroundStyle(Bell.Content.secondary)
+                        }
+                    }
+                    Spacer(minLength: Bell.Space.snug)
+                    Text(task.allDay ? "Today" : task.due.formatted(.dateTime.hour().minute()))
+                        .font(Bell.Type_.data(13, weight: .semibold))
+                        .foregroundStyle(task.kind == .exam ? Bell.Signal.now : Bell.Content.secondary)
+                }
+                .accessibilityElement(children: .combine)
             }
         }
     }

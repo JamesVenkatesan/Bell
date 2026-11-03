@@ -22,7 +22,7 @@ prototyping parsers in Python against real PDFs, then compiled by the user
 pasting errors back. If something here looks subtly wrong, it may well be.
 Build first, trust the tests, and fix what they catch.
 
-There are 365 tests. They are not decoration — most of them encode a bug that
+There are 419 tests. They are not decoration — most of them encode a bug that
 actually shipped and took a round trip with the user to find. Before changing
 parsing or scheduling logic, read the test for it.
 
@@ -55,7 +55,7 @@ means tests can't run; `xcodebuild -downloadPlatform iOS` fetches it (8 GB).
 without that.
 
 **Screenshots without tapping (DEBUG only).** `-BellSeedBundled YES` loads the
-bundled Events.xml into an empty store; `-BellRoute` takes week, inbox, review,
+bundled Events.xml into an empty store; `-BellRoute` takes week, inbox, review, notion,
 location, gallery, settings or `"course:ECE 30200"`. Also `-BellDemoCalendar`,
 `-BellDemoInbox`, `-BellLocationDemo`, `-BellNoPrompts`, `-BellNoActivity`,
 `-BellOnboarding`. Pass them to `xcrun simctl launch`.
@@ -153,7 +153,8 @@ Shared/
     DayIntelligence.swift FreeTime, DeadlinePressure, GapAdvisor, WakePlan
                           (moved here so the widget can use them)
   Widgets/         WidgetModel (pure), WidgetActions (App Group queue +
-                   AppIntents), WidgetViews (all eight); app + widget
+                   AppIntents), WidgetViews (eight), MaxPlan (pure) +
+                   MaxWidgetView (Bell Max); app + widget
   Persistence/
     AppGroup.swift        container + defaults, one identifier
     Records.swift         @Model schema (covers phases 2-6 already)
@@ -193,9 +194,12 @@ BellShare/         share extension: queues and exits, nothing else
 Shared/Inbox/      CaptureQueue (compiled into app + share extension only)
   Onboarding/  Settings/  Import/
   Email/           Gmail (OAuth + PKCE, Keychain tokens, polling), settings
+  Notion/          NotionSchema (pure: schema, mapping, values, kind, course),
+                   NotionAPI (client, pinned versions, fallback), NotionAccount
+                   (token, sync, BGAppRefreshTask), NotionSettingsView
   Widgets/         WidgetGalleryView: all eight, full colour and tinted
 BellWidget/        timeline provider + every widget family
-BellTests/         365 tests (Fixtures/ holds the real PDFs and ICS; gitignored)
+BellTests/         419 tests (Fixtures/ holds the real PDFs and ICS; gitignored)
 ```
 
 ---
@@ -584,7 +588,72 @@ where the user is every hour of the week. It doesn't leave the device.
    applies them at launch and on becoming active, because the widget can't
    open SwiftData.
 
+5. **Notion** (read-only, additive). Internal integration token in the
+   Keychain with `availableInBackground` (AfterFirstUnlock: the 5am refresh
+   runs locked). Discovery tries `POST /databases/{id}/query` at pinned
+   2022-06-28, then `/data_sources/{id}/query` at pinned 2025-09-03, and
+   remembers which worked; a sync that starts failing re-probes once.
+   Column mapping is by property **ID** (survives renames), suggested from
+   types, editable in Settings > Notion. Rows mirror into `StoredTask`
+   keyed by `notionPageID`; `BellStore.applyNotion` updates, adds and
+   removes only those rows, and only from a complete fetch (`allPages`
+   throws rather than return a partial list). `doneInBell` keeps a widget
+   tick across syncs since Bell never writes back. Course match reuses
+   `EventTextReader.course`; no match stays nil, shown as Uncategorised.
+   Refresh: BGAppRefreshTask for ~5am (a request iOS may defer), foreground
+   when over an hour old, and the widget sets `notionRefreshRequested` when
+   it sees data over four hours old (it cannot fetch or wake the app).
+   **Not tested against the real database**: the token never left the
+   phone. The Connect button probes it on device and Settings shows which
+   path was pinned.
+6. **Bell Max** (ninth widget, large). `MaxPlan` decides the composition:
+   classes lead while any remain, then today's due list leads and classes
+   collapse to a summary line; an exam within 7 days is a bottom line
+   (4-7 days), an outlined box on top (2-3), a solid block first (0-1).
+   Context blocks pin to the bottom edge. The Due widget flags each item's
+   course (dashed outline when uncategorised).
+
+7. **Deadlines on the day.** Today's timeline draws the selected day's
+   open tasks: `DayLayout(exams:)` turns a timed exam with an end into a
+   block that takes time (window, lanes, gaps); `DayLayout.deadlines`
+   places everything else: marks at their time inside the window (labels
+   nudged down, never up), lists above/below for times outside it (an
+   11:59 PM deadline doesn't stretch the day), all-day items in a strip.
+   "Coming up" above now starts tomorrow. Notion date ranges keep their
+   end (`NotionValue.ends`). DEBUG `-BellDemoTasks YES` seeds examples.
+8. **Bell Max legibility.** Nothing under 12pt; finished rows dim to 34%
+   only in full colour (0.55 when tinted/clear, where the widget sits on
+   the wallpaper); the exam hero is a heavy outline, not a knocked-out
+   fill, outside full colour. Renders cover light, dark and tinted.
+
+9. **Sky on "Done for today".** With no bell left, `BellSlab` shows
+   `SkyScene` instead of a course colour: before sundown a sunset whose sun
+   sinks and sky warms over the last four hours (the slab's level idea),
+   after sundown the moon at its real phase over stars that twinkle unless
+   Reduce Motion. `SkyClock` (Shared/Domain) computes sunrise/sunset (NOAA
+   equations, campus coordinates, checked against the independent sunrise
+   equation to ~1 min) and moon phase. Text sits on the hill silhouette,
+   which rises to just under half the slab so the headline is never on sky.
+10. **Bell Max, second design** (the glass-panel one was rejected as ugly,
+   and the three-section one before it as blocky). Now Apple's large-widget
+   shape: one hero (`MaxLayout.Hero`: exam today/tomorrow, else the bell's
+   live countdown, else the next deadline once classes are over, else a
+   quiet statement), a Fitness-style `DayRing` of the day's classes in
+   course colours, one merged time-ordered list (classes, deadlines, exam)
+   anchored to the bottom edge, and one footer line (an exam 2-7 days out,
+   or stale Notion). A quiet day's list is "Coming up" (next class, the
+   week's deadlines). Ground is always dark (`MaxGround`, a soft bloom of
+   the hero's colour) and the content is forced to the dark scheme to
+   match. No panels, one typeface plus the bell numeral, two greys.
+
 ## Open items
+
+- `NextBell` (the hero) knows only classes: during a timed exam it can say
+  "Done for today". Exams as bells is a sensible next step.
+
+- Notion: real-database behaviour, the background refresh actually firing
+  (only on device; simulate in the debugger with
+  `e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"com.yourteam.bell.notion-refresh"]`).
 
 - Not verified on a device: home-screen tinted compositing, the interactive
   widget buttons, the Bell widget's drain bar, Gmail sign-in end to end.

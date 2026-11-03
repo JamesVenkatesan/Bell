@@ -2,7 +2,7 @@ import AppIntents
 import SwiftUI
 import WidgetKit
 
-// The eight widgets. Each answers one question, has one focal point, and
+// The nine widgets. Each answers one question, has one focal point, and
 // uses its family's space for that question rather than shrinking another's.
 //
 // Shared with the app so the gallery renders exactly what the home screen
@@ -13,7 +13,7 @@ import WidgetKit
 // MARK: - Shared pieces
 
 enum WidgetKind: String, CaseIterable, Identifiable {
-    case bell, behind, free, due, today, week, leave, term
+    case bell, behind, free, due, today, week, leave, term, max
     var id: String { rawValue }
 
     var name: String {
@@ -26,6 +26,7 @@ enum WidgetKind: String, CaseIterable, Identifiable {
         case .week: "Week"
         case .leave: "Leave"
         case .term: "Term"
+        case .max: "Bell Max"
         }
     }
 
@@ -39,6 +40,7 @@ enum WidgetKind: String, CaseIterable, Identifiable {
         case .week: "How does the whole week look?"
         case .leave: "When do I leave, and for where?"
         case .term: "How far through the term am I?"
+        case .max: "What matters most today?"
         }
     }
 
@@ -46,7 +48,7 @@ enum WidgetKind: String, CaseIterable, Identifiable {
         switch self {
         case .bell, .behind: .systemSmall
         case .free, .due: .systemMedium
-        case .today, .week: .systemLarge
+        case .today, .week, .max: .systemLarge
         case .leave: .accessoryRectangular
         case .term: .accessoryCircular
         }
@@ -70,6 +72,7 @@ struct WidgetBody: View {
         case .week: WeekWidgetView(model: model)
         case .leave: LeaveWidgetView(model: model)
         case .term: TermWidgetView(model: model)
+        case .max: MaxWidgetView(model: model)
         }
     }
 
@@ -79,6 +82,21 @@ struct WidgetBody: View {
     static func background(_ kind: WidgetKind, _ model: WidgetModel) -> Color {
         if kind == .bell, let bell = model.bell { return model.color(for: bell.occurrence) }
         return Bell.Surface.raised
+    }
+}
+
+/// What sits behind a widget's content. A flat colour for most; Bell Max
+/// gets an atmosphere for its glass to sit in.
+struct WidgetGround: View {
+    var kind: WidgetKind
+    var model: WidgetModel
+
+    var body: some View {
+        if kind == .max {
+            MaxGround(model: model)
+        } else {
+            WidgetBody.background(kind, model)
+        }
     }
 }
 
@@ -387,7 +405,7 @@ struct DueWidgetView: View {
     private func focal(_ p: DeadlinePressure) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .top) {
-                Text(p.task.due, format: .dateTime.weekday(.abbreviated).hour().minute())
+                Text(dueLabel(p.task))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
@@ -402,10 +420,19 @@ struct DueWidgetView: View {
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
                 .widgetAccentable()
+            CourseFlag(task: p.task, model: model)
             Spacer(minLength: 0)
-            Text("About \(Int(p.freeHours.rounded())) free hours before it")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(p.level >= .tight ? Bell.Signal.now : Color.secondary)
+            if model.notionIsStale, let synced = model.notionSyncedAt {
+                // Honest about age before anything else: a deadline list
+                // that might be out of date should say so.
+                Text("Notion synced \(Text(synced, style: .relative)) ago")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("About \(Int(p.freeHours.rounded())) free hours before it")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(p.level >= .tight ? Bell.Signal.now : Color.secondary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -416,12 +443,18 @@ struct DueWidgetView: View {
                 Image(systemName: "circle").font(.system(size: 13, weight: .medium))
             }
             .buttonStyle(.plain)
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(p.task.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                Text(p.task.due, format: .dateTime.weekday(.abbreviated).hour().minute())
+                Text(dueLabel(p.task))
                     .font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+                CourseFlag(task: p.task, model: model, compact: true)
             }
         }
+    }
+
+    private func dueLabel(_ task: TaskEvent) -> String {
+        task.allDay ? task.due.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+            : task.due.formatted(.dateTime.weekday(.abbreviated).hour().minute())
     }
 }
 
@@ -456,7 +489,7 @@ struct TodayWidgetView: View {
                 // Capped, so two classes don't drift to opposite corners.
                 ForEach(Array(window.rows.enumerated()), id: \.element.id) { index, occurrence in
                     if index > 0 { Spacer(minLength: 7).frame(maxHeight: 30) }
-                    row(occurrence)
+                    DayClassRow(occurrence: occurrence, model: model)
                 }
                 Spacer(minLength: 7)
                 if let last = model.lastEnd {
@@ -469,40 +502,6 @@ struct TodayWidgetView: View {
         }
     }
 
-    private func row(_ occurrence: ScheduleEngine.Occurrence) -> some View {
-        let status = occurrence.status(at: model.date)
-        let level = RowEmphasis(status)
-        let focal = status == .inProgress || occurrence.id == model.bell?.occurrence.id
-        return HStack(alignment: .center, spacing: 10) {
-            Text(clock(occurrence.start))
-                .font(.system(size: 12, weight: .medium))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-                .frame(width: 58, alignment: .leading)
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(mode == .fullColor ? model.color(for: occurrence) : .primary)
-                .frame(width: 6, height: focal ? 40 : 30)
-                .widgetAccentable()
-            VStack(alignment: .leading, spacing: 0) {
-                Text(occurrence.event.course)
-                    .font(.system(size: focal ? 17 : 14, weight: focal ? .bold : .semibold).width(focal ? .expanded : .standard))
-                    .strikethrough(level.isStruck)
-                    .lineLimit(1)
-                Text(occurrence.event.room)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 0)
-            if status == .inProgress {
-                Text(timerInterval: model.date ... occurrence.end, countsDown: true)
-                    .font(.system(size: 15, weight: .bold).monospacedDigit())
-                    .foregroundStyle(Bell.Signal.now)
-                    .multilineTextAlignment(.trailing)
-                    .frame(width: 70, alignment: .trailing)
-            }
-        }
-        .opacity(level.opacity)
-    }
 
     /// One tap, no app: the class that just ended, and whether you went.
     private func attendance(_ occurrence: ScheduleEngine.Occurrence) -> some View {
@@ -693,3 +692,89 @@ struct TermWidgetView: View {
         }
     }
 }
+
+// MARK: - Shared rows
+
+/// One class in the day's timeline, in the Today widget's language:
+/// time, course-colour bar, course and room, a live countdown while it runs,
+/// finished classes dimmed and struck through.
+struct DayClassRow: View {
+    var occurrence: ScheduleEngine.Occurrence
+    var model: WidgetModel
+    var roomy = false
+    @Environment(\.widgetRenderingMode) private var mode
+
+    var body: some View {
+        let status = occurrence.status(at: model.date)
+        let level = RowEmphasis(status)
+        let focal = status == .inProgress || occurrence.id == model.bell?.occurrence.id
+        HStack(alignment: .center, spacing: 10) {
+            Text(clock(occurrence.start))
+                .font(.system(size: roomy ? 14 : 13, weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                // Wide enough for "12:30 PM" at either size; it truncated
+                // at the roomier one.
+                .frame(width: roomy ? 70 : 64, alignment: .leading)
+                .lineLimit(1)
+            Capsule()
+                .fill(mode == .fullColor ? model.color(for: occurrence) : .primary)
+                .frame(width: 6, height: (focal ? 38 : 28) + (roomy ? 6 : 0))
+                .widgetAccentable()
+            VStack(alignment: .leading, spacing: 0) {
+                Text(occurrence.event.course)
+                    .font(.system(size: (focal ? 18 : 15) + (roomy ? 2 : 0), weight: focal ? .heavy : .bold)
+                        .width(focal ? .expanded : .standard))
+                    .strikethrough(level.isStruck)
+                    .lineLimit(1)
+                Text(occurrence.event.room)
+                    .font(.system(size: roomy ? 13 : 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            if status == .inProgress {
+                Text(timerInterval: model.date ... occurrence.end, countsDown: true)
+                    .font(.system(size: 16, weight: .heavy).monospacedDigit())
+                    .foregroundStyle(mode == .fullColor ? AnyShapeStyle(Bell.Signal.now) : AnyShapeStyle(.primary))
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 74, alignment: .trailing)
+            }
+        }
+        // 34% is the agreed dimming for finished classes, and it holds on
+        // the widget's own ground. Drawn straight onto a wallpaper (tinted
+        // and clear home screens) it disappeared, so there it's lighter.
+        .opacity(mode == .fullColor ? level.opacity : max(level.opacity, 0.55))
+    }
+}
+
+/// Which class a task belongs to: the course's colour and code, or, when
+/// Bell couldn't match one, a dashed outline and "Uncategorised". The
+/// outline matters: an unmatched task must never look as if it had been
+/// given some course's colour.
+struct CourseFlag: View {
+    var task: TaskEvent
+    var model: WidgetModel
+    var compact = false
+    @Environment(\.widgetRenderingMode) private var mode
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 2, style: .continuous)
+        HStack(spacing: 5) {
+            if let color = model.color(forCourse: task.course) {
+                shape.fill(mode == .fullColor ? color : .primary)
+                    .frame(width: 4, height: compact ? 9 : 11)
+                    .widgetAccentable()
+            } else {
+                shape.strokeBorder(Color.secondary, style: StrokeStyle(lineWidth: 1, dash: [2, 1.5]))
+                    .frame(width: 5, height: compact ? 9 : 11)
+            }
+            Text(task.course ?? "Uncategorised")
+                .font(.system(size: compact ? 11 : 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+func widgetClock(_ date: Date) -> String { clock(date) }

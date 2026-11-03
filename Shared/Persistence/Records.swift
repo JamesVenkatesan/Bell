@@ -207,6 +207,20 @@ final class StoredTask {
     var location: String?
     var end: Date?
 
+    /// The Notion page this mirrors. Set only by the Notion sync, and the
+    /// whole of how it tells its own rows from yours: a sync updates and
+    /// removes rows with a page ID and never touches a row without one.
+    var notionPageID: String?
+
+    /// A deadline with a day but no time ("due Thursday"). Shown without a
+    /// clock time instead of an invented "11:59 PM".
+    var isAllDay: Bool?
+
+    /// Ticked off in Bell. Kept apart from `isDone` for Notion rows because
+    /// Bell never writes back: without it, the next sync would untick
+    /// whatever you'd ticked in a widget.
+    var doneInBell: Bool?
+
     init(title: String,
          courseCode: String? = nil,
          due: Date,
@@ -248,7 +262,7 @@ enum TaskKind: String, Codable, CaseIterable {
 /// Where a captured item came from. Used by the inbox and for provenance on
 /// anything the AI proposed.
 enum CaptureSource: String, Codable, CaseIterable {
-    case shareSheet, screenshot, photo, pdf, calendar, email, manual, subscription
+    case shareSheet, screenshot, photo, pdf, calendar, email, manual, subscription, notion
 
     var label: String {
         switch self {
@@ -260,6 +274,7 @@ enum CaptureSource: String, Codable, CaseIterable {
         case .email: "Email"
         case .manual: "Added by you"
         case .subscription: "Subscribed schedule"
+        case .notion: "Notion"
         }
     }
 }

@@ -55,6 +55,11 @@ struct SettingsView: View {
                     Label("Email", systemImage: "envelope")
                 }
                 NavigationLink {
+                    NotionSettingsView()
+                } label: {
+                    Label("Notion", systemImage: "checklist")
+                }
+                NavigationLink {
                     LocationSettingsView()
                 } label: {
                     Label("Location", systemImage: "location")

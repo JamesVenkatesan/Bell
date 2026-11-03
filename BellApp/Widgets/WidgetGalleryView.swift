@@ -96,7 +96,7 @@ struct WidgetPreview: View {
                     .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             } else {
                 content
-                    .background(WidgetBody.background(kind, model))
+                    .background(WidgetGround(kind: kind, model: model))
                     .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             }
         }

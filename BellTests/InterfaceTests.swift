@@ -547,3 +547,77 @@ final class LegibilityTests: XCTestCase {
         XCTAssertEqual(Bell.legibleOn(orchid), Bell.ink, "Fixed ink, not the adaptive canvas: a light slab needs dark text in dark mode too")
     }
 }
+
+// MARK: - Deadlines and exams on the day
+
+final class DayDeadlineTests: XCTestCase {
+
+    private func task(_ title: String, _ due: Date, _ kind: TaskEvent.Kind = .assignment,
+                      end: Date? = nil, allDay: Bool = false) -> TaskEvent {
+        TaskEvent(title: title, course: "ECE 30200", due: due, kind: kind, end: end, isAllDay: allDay)
+    }
+
+    /// Classes 9:00–10:00 and 14:00–15:00: the window is 9 to 3.
+    private var layout: DayLayout {
+        DayLayout(occurrences: [occurrence("ECE 30200", "WALC 1018", (9, 0), (10, 0)),
+                                occurrence("ECE 30100", "BHEE 170", (14, 0), (15, 0))],
+                  walkSeconds: eightMinuteWalk)
+    }
+
+    func testDeadlinesGoWhereTheyBelong() {
+        let d = layout.deadlines([
+            task("Inside", date(2026, 11, 4, 12)),
+            task("Early", date(2026, 11, 4, 8)),
+            task("Tonight", date(2026, 11, 4, 23, 59)),
+            task("Reading", date(2026, 11, 4), .other, allDay: true),
+        ])
+        XCTAssertEqual(d.marks.map(\.task.title), ["Inside"])
+        XCTAssertEqual(d.marks.first?.y ?? 0, layout.y(for: date(2026, 11, 4, 12)), accuracy: 0.01)
+        XCTAssertEqual(d.before.map(\.title), ["Early"])
+        XCTAssertEqual(d.after.map(\.title), ["Tonight"], "Midnight doesn't stretch the day")
+        XCTAssertEqual(d.allDay.map(\.title), ["Reading"])
+    }
+
+    /// Two deadlines five minutes apart: the second label moves down, never
+    /// up, and both keep their true positions.
+    func testCloseLabelsAreNudgedApart() {
+        let d = layout.deadlines([task("A", date(2026, 11, 4, 12)), task("B", date(2026, 11, 4, 12, 5))], spacing: 30)
+        XCTAssertEqual(d.marks.count, 2)
+        XCTAssertEqual(d.marks[1].labelY - d.marks[0].labelY, 30, accuracy: 0.01)
+        XCTAssertGreaterThanOrEqual(d.marks[1].labelY, d.marks[1].y)
+        XCTAssertLessThan(d.marks[1].y, d.marks[1].labelY)
+    }
+
+    /// A timed exam takes its time: it widens the window and turns a free
+    /// gap into two shorter ones.
+    func testATimedExamTakesTimeOnTheDay() throws {
+        let exam = task("Midterm", date(2026, 11, 4, 11), .exam, end: date(2026, 11, 4, 12, 30))
+        let withExam = DayLayout(occurrences: [occurrence("ECE 30200", "WALC 1018", (9, 0), (10, 0)),
+                                               occurrence("ECE 30100", "BHEE 170", (14, 0), (15, 0))],
+                                 exams: [exam], walkSeconds: eightMinuteWalk)
+        XCTAssertEqual(withExam.examBlocks.count, 1)
+        let block = try XCTUnwrap(withExam.examBlocks.first)
+        XCTAssertEqual(block.height, 90 * withExam.pointsPerMinute, accuracy: 0.01)
+        XCTAssertEqual(layout.gaps.filter { $0.kind == .free }.count, 1)
+        XCTAssertEqual(withExam.gaps.map(\.minutes), [60, 90], "10–11 and 12:30–2")
+
+        let evening = DayLayout(occurrences: [occurrence("ECE 30200", "WALC 1018", (9, 0), (10, 0))],
+                                exams: [task("Final", date(2026, 11, 4, 19), .exam, end: date(2026, 11, 4, 21))],
+                                walkSeconds: eightMinuteWalk)
+        XCTAssertEqual(evening.windowEnd, date(2026, 11, 4, 21), "An evening exam is part of the day")
+    }
+
+    /// No end, no invented length.
+    func testAnExamWithoutAnEndIsNotABlock() {
+        let l = DayLayout(occurrences: [occurrence("ECE 30200", "WALC 1018", (9, 0), (10, 0))],
+                          exams: [task("Quiz day", date(2026, 11, 4, 9, 30), .exam)], walkSeconds: eightMinuteWalk)
+        XCTAssertTrue(l.examBlocks.isEmpty)
+    }
+
+    func testOnlyExamsStillDrawADay() {
+        let l = DayLayout(occurrences: [], exams: [task("Final", date(2026, 11, 4, 8), .exam, end: date(2026, 11, 4, 10))],
+                          walkSeconds: eightMinuteWalk)
+        XCTAssertEqual(l.examBlocks.count, 1)
+        XCTAssertEqual(l.windowStart, date(2026, 11, 4, 8))
+    }
+}

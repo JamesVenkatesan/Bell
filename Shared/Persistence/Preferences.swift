@@ -118,6 +118,33 @@ enum Preferences {
         set { defaults?.set(Array(newValue), forKey: "calendar.excluded") }
     }
 
+    // MARK: Notion
+
+    /// Whether a Notion database is connected. Mirrored here (the token
+    /// itself is in the Keychain, which the widget can't and shouldn't read)
+    /// so the widget knows whether "nothing due" means nothing due or
+    /// nothing synced.
+    static var notionConnected: Bool {
+        get { defaults?.bool(forKey: "notion.connected") ?? false }
+        set { defaults?.set(newValue, forKey: "notion.connected") }
+    }
+
+    /// The last complete, successful sync. Shown wherever Notion data is,
+    /// so nothing implies it's live.
+    static var notionSyncedAt: Date? {
+        get { defaults?.object(forKey: "notion.syncedAt") as? Date }
+        set { defaults?.set(newValue, forKey: "notion.syncedAt") }
+    }
+
+    /// Set by the widget when it builds a timeline from Notion data older
+    /// than `NotionFreshness.widgetMaxAge`. The one write the widget makes
+    /// here: it can't fetch (no network in a timeline build) or wake the
+    /// app, so it leaves a note the app acts on the next time it runs.
+    static var notionRefreshRequested: Date? {
+        get { defaults?.object(forKey: "notion.refreshRequested") as? Date }
+        set { defaults?.set(newValue, forKey: "notion.refreshRequested") }
+    }
+
     /// Raw store for things that aren't preferences but need the same reach,
     /// such as learned building positions.
     static var store: UserDefaults? { defaults }

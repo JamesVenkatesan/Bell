@@ -1,7 +1,7 @@
 import SwiftUI
 import WidgetKit
 
-// The eight widgets. What each shows lives in Shared/Widgets, so the app's
+// The nine widgets. What each shows lives in Shared/Widgets, so the app's
 // gallery renders the same views; this file only registers them and builds
 // their timeline.
 
@@ -23,6 +23,13 @@ struct BellProvider: TimelineProvider {
     /// those tick by themselves through timer text, so nothing polls.
     func getTimeline(in context: Context, completion: @escaping (Timeline<BellEntry>) -> Void) {
         let now = Date.now
+        // The widget can't fetch or wake the app. When it finds Notion data
+        // older than a few hours it leaves a note, and the app syncs the
+        // next time it runs (and asks iOS for a sooner background refresh).
+        if Preferences.notionConnected, Preferences.notionRefreshRequested == nil,
+           NotionFreshness.isStale(Preferences.notionSyncedAt, now: now, maxAge: NotionFreshness.widgetMaxAge) {
+            Preferences.notionRefreshRequested = now
+        }
         let timetable = SnapshotCache.read()
         let dates = [now] + WidgetModel.refreshDates(timetable: timetable, hidden: Preferences.hiddenCourses,
                                                      leaveBuffer: Preferences.leaveBuffer, from: now)
@@ -38,6 +45,7 @@ struct BellProvider: TimelineProvider {
             leaveBuffer: Preferences.leaveBuffer,
             completedTasks: WidgetActions.completedTasks,
             markedAttendance: WidgetActions.markedAttendance,
+            notionSyncedAt: Preferences.notionConnected ? Preferences.notionSyncedAt : nil,
             now: date))
     }
 }
@@ -48,7 +56,7 @@ struct BellProvider: TimelineProvider {
 func configuration(_ kind: WidgetKind) -> some WidgetConfiguration {
     StaticConfiguration(kind: kind.kindID, provider: BellProvider()) { entry in
         WidgetBody(kind: kind, model: entry.model)
-            .containerBackground(WidgetBody.background(kind, entry.model), for: .widget)
+            .containerBackground(for: .widget) { WidgetGround(kind: kind, model: entry.model) }
     }
     .configurationDisplayName(kind.name)
     .description(kind.question)
@@ -63,6 +71,7 @@ struct TodayWidgetLarge: Widget { var body: some WidgetConfiguration { configura
 struct WeekWidgetLarge: Widget { var body: some WidgetConfiguration { configuration(.week) } }
 struct LeaveWidgetLock: Widget { var body: some WidgetConfiguration { configuration(.leave) } }
 struct TermWidgetLock: Widget { var body: some WidgetConfiguration { configuration(.term) } }
+struct BellMaxWidgetLarge: Widget { var body: some WidgetConfiguration { configuration(.max) } }
 
 @main
 struct BellWidgetBundle: WidgetBundle {
@@ -75,6 +84,7 @@ struct BellWidgetBundle: WidgetBundle {
         WeekWidgetLarge()
         LeaveWidgetLock()
         TermWidgetLock()
+        BellMaxWidgetLarge()
         ClassLiveActivity()
     }
 }

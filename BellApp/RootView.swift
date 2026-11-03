@@ -12,6 +12,7 @@ enum Route: Hashable {
     case review
     case location
     case gallery
+    case notion
     case settings
 }
 
@@ -59,6 +60,7 @@ struct RootView: View {
                 if route == "settings" { path = [.settings] }
                 if route == "location" { path = [.location] }
                 if route == "gallery" { path = [.gallery] }
+                if route == "notion" { path = [.notion] }
                 if route.hasPrefix("course:") {
                     path = [.course(code: String(route.dropFirst(7)), sourceID: "debug")]
                 }
@@ -99,6 +101,8 @@ struct RootView: View {
             LocationSettingsView()
         case .gallery:
             WidgetGalleryView()
+        case .notion:
+            NotionSettingsView()
         case .settings:
             SettingsView(onReplayIntroduction: { isOnboarding = true })
         }

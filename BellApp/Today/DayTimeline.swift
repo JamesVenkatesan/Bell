@@ -15,6 +15,8 @@ struct DayTimeline: View {
     var conflicts: [String: ConflictDetector.Conflict] = [:]
     /// What each free gap is good for, keyed by the gap's start.
     var suggestions: [Date: String] = [:]
+    /// Deadlines that fall inside the drawn day, at their time.
+    var deadlines: [DayLayout.DeadlineMark] = []
     var open: (Route) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -51,6 +53,16 @@ struct DayTimeline: View {
                         .animation(Bell.Motion.standard, value: hasArrived)
                 }
 
+                ForEach(layout.examBlocks) { block in
+                    let laneWidth = trackWidth / Double(block.laneCount)
+                    ExamBlockView(task: block.task, color: palette[block.task.course ?? ""], height: block.height)
+                        .frame(width: max(0, laneWidth - (block.laneCount > 1 ? Bell.Space.tight : 0)),
+                               height: block.height)
+                        .offset(x: trackX + laneWidth * Double(block.lane), y: block.y)
+                        .opacity(hasArrived ? 1 : 0)
+                        .animation(Bell.Motion.standard, value: hasArrived)
+                }
+
                 ForEach(Array(layout.blocks.enumerated()), id: \.element.id) { index, block in
                     let laneWidth = trackWidth / Double(block.laneCount)
                     blockButton(block)
@@ -60,6 +72,15 @@ struct DayTimeline: View {
                         .opacity(hasArrived ? 1 : 0)
                         .offset(y: hasArrived || reduceMotion ? 0 : Bell.Space.snug)
                         .animation(Bell.Motion.stagger(index: index), value: hasArrived)
+                }
+
+                // Above the classes, so a deadline inside a class's time is
+                // still seen; below the now line, which nothing may hide.
+                ForEach(deadlines) { mark in
+                    DeadlineMarkView(mark: mark, color: palette[mark.task.course ?? ""], now: now,
+                                     trackX: trackX, width: geometry.size.width)
+                        .opacity(hasArrived ? 1 : 0)
+                        .animation(Bell.Motion.standard, value: hasArrived)
                 }
 
                 nowLine(width: geometry.size.width)
@@ -243,6 +264,118 @@ struct ClassBlock: View {
         }
         let clash = conflict.map { ". Clashes with \($0.event.title)" } ?? ""
         return "\(prefix)\(occurrence.event.course), \(time), \(occurrence.event.room)\(clash)"
+    }
+}
+
+// MARK: - Exams and deadlines
+
+/// A timed exam on the day. A solid segment of the track in the signal
+/// colour, because an exam is the thing on a day that must not be missed,
+/// with its course colour as a thin edge so it still says which class.
+private struct ExamBlockView: View {
+    var task: TaskEvent
+    var color: Color?
+    var height: Double
+
+    var body: some View {
+        HStack(alignment: .top, spacing: Bell.Space.base) {
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 3, style: .continuous).fill(Bell.Signal.now)
+                if let color {
+                    Rectangle().fill(color).frame(width: 3)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+            .frame(width: ClassBlock.trackWidth)
+            VStack(alignment: .leading, spacing: Bell.Space.hair) {
+                Text(task.title)
+                    .font(height >= 44 ? Bell.Type_.title : Bell.Type_.headline)
+                    .foregroundStyle(Bell.Content.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                if height >= 40 {
+                    Text((["Exam", task.course ?? "Uncategorised"] + [task.location].compactMap { $0 }).joined(separator: " · "))
+                        .font(Bell.Type_.caption)
+                        .foregroundStyle(Bell.Signal.now)
+                        .lineLimit(1)
+                }
+                if height >= 72, let end = task.end {
+                    Text("\(task.due, format: .dateTime.hour().minute())–\(end, format: .dateTime.hour().minute())")
+                        .font(Bell.Type_.data(13, weight: .regular))
+                        .foregroundStyle(Bell.Content.secondary)
+                }
+            }
+            .padding(.top, Bell.Space.hair)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Exam: \(task.title), \(task.course ?? "uncategorised"), "
+                            + task.due.formatted(.dateTime.hour().minute()))
+    }
+}
+
+/// A deadline at its time: a diamond on the track where it falls, and a
+/// label at the trailing edge, nudged down if another sits too close. The
+/// label has its own ground so it stays readable over a class's text.
+private struct DeadlineMarkView: View {
+    var mark: DayLayout.DeadlineMark
+    var color: Color?
+    var now: Date
+    var trackX: Double
+    var width: Double
+
+    private var task: TaskEvent { mark.task }
+    private var isExam: Bool { task.kind == .exam }
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            // The point in time, on the track.
+            Rectangle()
+                .fill(isExam ? Bell.Signal.now : Bell.Content.primary)
+                .frame(width: 9, height: 9)
+                .rotationEffect(.degrees(45))
+                .offset(x: trackX + (ClassBlock.trackWidth - 9) / 2, y: mark.y - 4.5)
+            // A hairline from the point to the label, so a nudged label
+            // still points at its own time.
+            Path { path in
+                path.move(to: CGPoint(x: trackX + ClassBlock.trackWidth, y: mark.y))
+                path.addLine(to: CGPoint(x: width * 0.42, y: mark.labelY))
+            }
+            .stroke(Bell.Content.tertiary, style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+
+            pill
+                .frame(maxWidth: width * 0.58, alignment: .trailing)
+                .frame(width: width, alignment: .trailing)
+                .offset(y: mark.labelY - 13)
+        }
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(isExam ? "Exam" : "Due"): \(task.title), \(task.course ?? "uncategorised"), "
+                            + task.due.formatted(.dateTime.hour().minute()))
+    }
+
+    private var pill: some View {
+        HStack(spacing: Bell.Space.tight) {
+            Circle()
+                .fill(color ?? .clear)
+                .overlay { if color == nil { Circle().strokeBorder(Bell.Content.tertiary, lineWidth: 1) } }
+                .frame(width: 7, height: 7)
+            Image(systemName: task.kind.symbol)
+                .font(.system(size: 11, weight: .semibold))
+            Text(task.title)
+                .font(Bell.Type_.caption.weight(.semibold))
+                .lineLimit(1)
+            Text(task.due, format: .dateTime.hour().minute())
+                .font(Bell.Type_.data(12, weight: .semibold))
+                .foregroundStyle(isExam ? Bell.legibleOn(Bell.Signal.now).opacity(0.8) : Bell.Content.secondary)
+        }
+        .foregroundStyle(isExam ? Bell.legibleOn(Bell.Signal.now) : Bell.Content.primary)
+        .padding(.horizontal, Bell.Space.snug)
+        .frame(height: 26)
+        .background {
+            Capsule().fill(isExam ? Bell.Signal.now : Bell.Surface.raised)
+                .overlay { if !isExam { Capsule().strokeBorder(Bell.Surface.hairline, lineWidth: 1) } }
+        }
     }
 }
 

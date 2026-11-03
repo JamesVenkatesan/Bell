@@ -28,25 +28,39 @@ struct BellSlab: View {
             let level = bell?.remainingFraction(at: now) ?? 0
             let height = geometry.size.height
             ZStack(alignment: .bottom) {
-                // The drained part is a wash of the same colour rather than
-                // grey, so the slab keeps its course's identity all the way
-                // down. Pale enough that ink stays well above 4.5:1 on it.
-                Bell.Surface.canvas
-                color.opacity(0.22)
-                color.frame(height: height * level)
-                    .animation(reduceMotion ? nil : Bell.Motion.continuous, value: level)
+                if bell == nil {
+                    // No bell left today, so no course to colour the slab
+                    // with: it shows the sky instead, sunset or moon.
+                    SkyScene(now: now)
+                        .transition(.opacity)
+                    content(width: geometry.size.width)
+                        .foregroundStyle(Bell.paper)
+                        // The date line sits on sky, which can be pale in
+                        // the afternoon; a soft shadow keeps it legible
+                        // without a box.
+                        .shadow(color: .black.opacity(0.35), radius: 6, y: 1)
+                } else {
+                    // The drained part is a wash of the same colour rather
+                    // than grey, so the slab keeps its course's identity all
+                    // the way down. Pale enough that ink stays above 4.5:1.
+                    Bell.Surface.canvas
+                    color.opacity(0.22)
+                    color.frame(height: height * level)
+                        .animation(reduceMotion ? nil : Bell.Motion.continuous, value: level)
 
-                content(width: geometry.size.width)
-                    .foregroundStyle(Bell.Content.primary)
+                    content(width: geometry.size.width)
+                        .foregroundStyle(Bell.Content.primary)
 
-                content(width: geometry.size.width)
-                    .foregroundStyle(Bell.legibleOn(color))
-                    .mask(alignment: .bottom) {
-                        Rectangle().frame(height: height * level)
-                            .animation(reduceMotion ? nil : Bell.Motion.continuous, value: level)
-                    }
-                    .accessibilityHidden(true)
+                    content(width: geometry.size.width)
+                        .foregroundStyle(Bell.legibleOn(color))
+                        .mask(alignment: .bottom) {
+                            Rectangle().frame(height: height * level)
+                                .animation(reduceMotion ? nil : Bell.Motion.continuous, value: level)
+                        }
+                        .accessibilityHidden(true)
+                }
             }
+            .animation(reduceMotion ? nil : Bell.Motion.standard, value: bell == nil)
             .keyframeAnimator(initialValue: 0.0, trigger: rings) { view, swing in
                 view.offset(x: swing)
             } keyframes: { _ in

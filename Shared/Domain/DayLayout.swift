@@ -37,6 +37,18 @@ struct DayLayout {
         var id: String { event.id }
     }
 
+    /// An exam with a start and an end: a commitment that takes its time
+    /// on the day like a class does, and is drawn louder than one.
+    struct ExamBlock: Identifiable, Hashable {
+        var task: TaskEvent
+        var y: Double
+        var height: Double
+        var lane: Int
+        var laneCount: Int
+
+        var id: UUID { task.id }
+    }
+
     struct Gap: Identifiable, Hashable {
         enum Kind: Hashable {
             /// The walk doesn't fit. Drawn as a warning.
@@ -63,6 +75,7 @@ struct DayLayout {
     let pointsPerMinute: Double
     let blocks: [Block]
     let busyBlocks: [BusyBlock]
+    let examBlocks: [ExamBlock]
     let gaps: [Gap]
 
     var height: Double { minutes(from: windowStart, to: windowEnd) * pointsPerMinute }
@@ -93,23 +106,31 @@ struct DayLayout {
     ///     don't depend on real campus coordinates.
     ///   - busy: events from other calendars. They take space and lanes
     ///     like classes, and a gap they fill is not free time.
+    ///   - exams: timed exams with an end. They take space, lanes and
+    ///     gaps like classes; an exam with no end isn't given an invented
+    ///     length and goes to `deadlines` as a point instead.
     init(occurrences: [ScheduleEngine.Occurrence],
          busy: [ExternalEvent] = [],
+         exams: [TaskEvent] = [],
          basePointsPerMinute: Double = 1.1,
          calendar: Calendar = .current,
          walkSeconds: (String?, String?) -> TimeInterval) {
 
         let sorted = occurrences.sorted { ($0.start, $0.end) < ($1.start, $1.end) }
         let others = busy.filter(\.occupiesTime).sorted { ($0.start, $0.end) < ($1.start, $1.end) }
+        let timedExams = exams.compactMap { exam in exam.end.map { (exam, $0) } }.filter { $0.1 > $0.0.due }
 
         // One timeline of everything that takes time, so window, lanes and
         // gaps all see the same day.
-        enum Kind { case lesson(Int), other(Int) }
+        enum Kind { case lesson(Int), other(Int), exam(Int) }
         struct Item { var start: Date; var end: Date; var building: String?; var kind: Kind }
         let items = (sorted.enumerated().map { Item(start: $1.start, end: $1.end,
                                                     building: $1.event.building, kind: .lesson($0)) }
                      + others.enumerated().map { Item(start: $1.start, end: $1.end,
-                                                      building: $1.building, kind: .other($0)) })
+                                                      building: $1.building, kind: .other($0)) }
+                     + timedExams.enumerated().map { Item(start: $1.0.due, end: $1.1,
+                                                          building: $1.0.location.flatMap { $0.split(separator: " ").first.map(String.init) },
+                                                          kind: .exam($0)) })
             .sorted { ($0.start, $0.end) < ($1.start, $1.end) }
 
         guard let first = items.first,
@@ -120,6 +141,7 @@ struct DayLayout {
             pointsPerMinute = basePointsPerMinute
             blocks = []
             busyBlocks = []
+            examBlocks = []
             gaps = []
             return
         }
@@ -143,6 +165,7 @@ struct DayLayout {
 
         var lessonBlocks: [Block] = []
         var otherBlocks: [BusyBlock] = []
+        var exams: [ExamBlock] = []
         for (index, item) in items.enumerated() {
             switch item.kind {
             case .lesson(let i):
@@ -155,10 +178,15 @@ struct DayLayout {
                 otherBlocks.append(BusyBlock(event: event, y: y(event.start),
                                              height: height(event.start, event.end),
                                              lane: lanes[index].lane, laneCount: lanes[index].count))
+            case .exam(let i):
+                let (task, end) = timedExams[i]
+                exams.append(ExamBlock(task: task, y: y(task.due), height: height(task.due, end),
+                                       lane: lanes[index].lane, laneCount: lanes[index].count))
             }
         }
         blocks = lessonBlocks
         busyBlocks = otherBlocks
+        examBlocks = exams
 
         // Gaps are measured from the latest end so far, not the previous
         // row's end: with an overlap, the earlier item can finish after the
@@ -200,7 +228,8 @@ struct DayLayout {
     /// Where the now hairline goes, or nil when now is outside the drawn day.
     /// A line pinned to the top or bottom edge would claim a time it isn't.
     func nowY(at now: Date) -> Double? {
-        guard !blocks.isEmpty || !busyBlocks.isEmpty, now >= windowStart, now <= windowEnd else { return nil }
+        guard !blocks.isEmpty || !busyBlocks.isEmpty || !examBlocks.isEmpty,
+              now >= windowStart, now <= windowEnd else { return nil }
         return y(for: now)
     }
 
@@ -222,6 +251,58 @@ struct DayLayout {
             cursor = next
         }
         return marks
+    }
+
+    // MARK: - Deadlines
+
+    /// A deadline placed on the day: its true position, and where its label
+    /// goes once nudged clear of the one above.
+    struct DeadlineMark: Identifiable, Hashable {
+        var task: TaskEvent
+        var y: Double
+        var labelY: Double
+        var id: UUID { task.id }
+    }
+
+    /// The day's deadlines, sorted by where they belong.
+    struct Deadlines: Equatable {
+        /// No time of day: a strip at the top.
+        var allDay: [TaskEvent] = []
+        /// Before the first thing on the timeline.
+        var before: [TaskEvent] = []
+        /// On the timeline, at their time.
+        var marks: [DeadlineMark] = []
+        /// After the last thing on the timeline: tonight's deadlines.
+        var after: [TaskEvent] = []
+
+        var isEmpty: Bool { allDay.isEmpty && before.isEmpty && marks.isEmpty && after.isEmpty }
+    }
+
+    /// Where each of a day's deadlines goes.
+    ///
+    /// Inside the drawn window they're marked at their exact time. Outside
+    /// it they're listed above or below instead: stretching the timeline to
+    /// midnight for an 11:59 PM homework would add hours of empty scroll to
+    /// every evening. Labels closer than `spacing` are pushed down, never up,
+    /// so a label is never above the time it marks.
+    func deadlines(_ tasks: [TaskEvent], spacing: Double = 30) -> Deadlines {
+        var result = Deadlines()
+        var lastLabel = -Double.infinity
+        for task in tasks.sorted(by: { $0.due < $1.due }) {
+            if task.allDay {
+                result.allDay.append(task)
+            } else if windowEnd <= windowStart || task.due > windowEnd {
+                result.after.append(task)
+            } else if task.due < windowStart {
+                result.before.append(task)
+            } else {
+                let y = y(for: task.due)
+                let labelY = max(y, lastLabel + spacing)
+                lastLabel = labelY
+                result.marks.append(DeadlineMark(task: task, y: y, labelY: labelY))
+            }
+        }
+        return result
     }
 
     // MARK: - Helpers

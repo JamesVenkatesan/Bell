@@ -74,7 +74,11 @@ enum Keychain {
 
     private static let service = "com.yourteam.bell"
 
-    static func write(_ value: String, account: String) {
+    /// `availableInBackground`: readable after the first unlock since boot,
+    /// not only while unlocked. A background refresh at 6am runs with the
+    /// phone locked, and the stricter class would make every one of them
+    /// fail to read its own token.
+    static func write(_ value: String, account: String, availableInBackground: Bool = false) {
         guard let data = value.data(using: .utf8) else { return }
 
         let query: [String: Any] = [
@@ -89,9 +93,11 @@ enum Keychain {
 
         var attributes = query
         attributes[kSecValueData as String] = data
-        // Needs to survive a reboot before first unlock? No — a fetch only
-        // happens with the app in use, so the stricter class is free.
-        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        // Stricter by default: most secrets here are only read with the app
+        // in use, where it costs nothing.
+        attributes[kSecAttrAccessible as String] = availableInBackground
+            ? kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            : kSecAttrAccessibleWhenUnlockedThisDeviceOnly
 
         SecItemAdd(attributes as CFDictionary, nil)
     }

@@ -38,6 +38,25 @@ struct BellApp: App {
         if UserDefaults.standard.bool(forKey: "BellDemoCalendar") {
             Self.seedDemoCalendar()
         }
+        // `-BellDemoTasks YES` mirrors a few Notion rows into today, as a
+        // real sync would: a deadline during class, one tonight, an
+        // all-day reading and a timed exam, for checking the day view.
+        if UserDefaults.standard.bool(forKey: "BellDemoTasks") {
+            let day = Calendar.current.startOfDay(for: .now)
+            func at(_ h: Int, _ m: Int = 0) -> Date { day.addingTimeInterval(Double(h * 3600 + m * 60)) }
+            BellStore.shared.applyNotion([
+                NotionItem(pageID: "demo-1", title: "Homework 9", due: at(10), isAllDay: false,
+                           kind: .assignment, isDone: false, course: "ECE 30200"),
+                NotionItem(pageID: "demo-2", title: "Lab 6 write-up", due: at(13, 20), isAllDay: false,
+                           kind: .assignment, isDone: false, course: "ECE 30864L"),
+                NotionItem(pageID: "demo-3", title: "Read chapter 7", due: day, isAllDay: true,
+                           kind: .other, isDone: false),
+                NotionItem(pageID: "demo-4", title: "Midterm 2", due: at(18), isAllDay: false, end: at(19, 30),
+                           kind: .exam, isDone: false, course: "ECE 30100"),
+                NotionItem(pageID: "demo-5", title: "Quiz 4 corrections", due: at(23, 59), isAllDay: false,
+                           kind: .quiz, isDone: false, course: "ECE 36200"),
+            ])
+        }
         #endif
     }
 
@@ -90,6 +109,9 @@ struct BellApp: App {
                     Task { await session.timetableChanged(store: store) }
                 }
                 .onChange(of: scenePhase) { _, phase in
+                    // Leaving is the last moment to book the morning
+                    // refresh; resubmitting just replaces the old request.
+                    if phase == .background { NotionAccount.scheduleRefresh() }
                     guard phase == .active else { return }
                     session.scheduleCalendarSync(using: store)
                     session.location.learnFromPresence(store: store)
@@ -101,6 +123,8 @@ struct BellApp: App {
                     // New mail, at most every fifteen minutes (the account
                     // throttles itself), through the same inbox pipeline.
                     Task { await session.gmail.check(into: session.inbox, store: store) }
+                    // Notion when it's over an hour old, or a widget asked.
+                    Task { await NotionAccount.shared.syncIfNeeded(store: store) }
                     // Anything shared into Bell while it was in the background.
                     Task { await session.inbox.drain(CaptureQueue.shared, store: store) }
                 }
@@ -110,6 +134,10 @@ struct BellApp: App {
                 .task { await session.didLaunch(using: store) }
         }
         .modelContainer(store.container)
+        // The morning Notion refresh, when iOS grants it.
+        .backgroundTask(.appRefresh(NotionAccount.refreshTaskID)) {
+            await NotionAccount.runBackgroundRefresh()
+        }
     }
 }
 
@@ -198,6 +226,8 @@ final class AppSession {
         store.applyWidgetActions()
         await inbox.drain(CaptureQueue.shared, store: store)
         await location.start(store: store)
+        // Cold launches don't pass through the scene-phase change above.
+        await NotionAccount.shared.syncIfNeeded(store: store)
 
         #if DEBUG
         // `-BellDemoInbox YES` runs three sample messages through the real

@@ -73,8 +73,14 @@ struct TaskEvent: Codable, Hashable, Identifiable {
     var addedAutomatically: Bool? = nil
     var location: String? = nil
     var end: Date? = nil
+    /// A day with no time: show "Thu", not "Thu 11:59 PM".
+    var isAllDay: Bool? = nil
+    /// Mirrors a Notion page, so a missing course reads as "Uncategorised"
+    /// (Bell looked and found no match) rather than simply blank.
+    var fromNotion: Bool? = nil
 
     var isAutomatic: Bool { addedAutomatically ?? false }
+    var allDay: Bool { isAllDay ?? false }
 
     enum Kind: String, Codable, CaseIterable {
         case exam, assignment, quiz, project, meeting, other

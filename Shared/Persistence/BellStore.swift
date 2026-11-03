@@ -105,7 +105,9 @@ final class BellStore {
                       isDone: $0.isDone,
                       addedAutomatically: $0.addedAutomatically,
                       location: $0.location,
-                      end: $0.end)
+                      end: $0.end,
+                      isAllDay: $0.isAllDay,
+                      fromNotion: $0.notionPageID == nil ? nil : true)
         }
 
         let exceptions = (try? context.fetch(FetchDescriptor<StoredException>())) ?? []
@@ -438,7 +440,7 @@ final class BellStore {
         for action in actions {
             switch action {
             case .taskDone(let id):
-                if let task = storedTask(id: id) { task.isDone = true }
+                if let task = storedTask(id: id) { markDone(true, task) }
             case .attendance(let course, let start, let went):
                 record(went ? .attended : .missed, forCourse: course, at: start)
             }
@@ -489,7 +491,74 @@ final class BellStore {
     }
 
     func setTaskDone(_ done: Bool, id: UUID) {
-        storedTask(id: id)?.isDone = done
+        if let task = storedTask(id: id) { markDone(done, task) }
+        save()
+    }
+
+    /// A Notion row remembers that the tick was yours, so the next sync,
+    /// which rewrites everything else from Notion, keeps it.
+    private func markDone(_ done: Bool, _ task: StoredTask) {
+        task.isDone = done
+        if task.notionPageID != nil { task.doneInBell = done }
+    }
+
+    // MARK: - Notion
+
+    struct NotionApplied: Equatable {
+        var added = 0, updated = 0, removed = 0
+    }
+
+    /// Makes Bell's Notion rows match `items` exactly, in one save.
+    ///
+    /// Notion is the source of truth for these rows, so an item that has
+    /// gone from Notion goes from Bell. Only call this with a *complete*
+    /// fetch: given a partial one it would delete the rest. Rows without a
+    /// page ID are yours and are never read, changed or removed here.
+    @discardableResult
+    func applyNotion(_ items: [NotionItem]) -> NotionApplied {
+        let mirrored = ((try? context.fetch(FetchDescriptor<StoredTask>())) ?? []).filter { $0.notionPageID != nil }
+        var existing: [String: StoredTask] = [:]
+        for task in mirrored {
+            // A duplicate can only come from an interrupted earlier save;
+            // keep one, drop the rest.
+            if existing[task.notionPageID!] != nil { context.delete(task) } else { existing[task.notionPageID!] = task }
+        }
+
+        var result = NotionApplied()
+        var seen = Set<String>()
+        for item in items where seen.insert(item.pageID).inserted {
+            let task: StoredTask
+            if let found = existing[item.pageID] {
+                task = found
+                result.updated += 1
+            } else {
+                task = StoredTask(title: item.title, due: item.due, origin: .notion)
+                task.notionPageID = item.pageID
+                context.insert(task)
+                result.added += 1
+            }
+            task.title = item.title
+            task.courseCode = item.course
+            task.due = item.due
+            task.isAllDay = item.isAllDay
+            task.end = item.end
+            task.kind = TaskKind(rawValue: item.kind.rawValue) ?? .other
+            task.isDone = item.isDone || (task.doneInBell ?? false)
+        }
+        for (pageID, task) in existing where !seen.contains(pageID) {
+            context.delete(task)
+            result.removed += 1
+        }
+        save()
+        return result
+    }
+
+    /// Disconnecting takes Notion's rows with it: they were only ever a
+    /// mirror, and a mirror of nothing would go stale silently.
+    func removeNotionTasks() {
+        for task in (try? context.fetch(FetchDescriptor<StoredTask>())) ?? [] where task.notionPageID != nil {
+            context.delete(task)
+        }
         save()
     }
 

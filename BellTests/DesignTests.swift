@@ -142,3 +142,66 @@ final class TermProgressTests: XCTestCase {
         XCTAssertNil(TermProgress.make(timetable: table, engine: engine, now: date(2027, 1, 10)), "Out of term")
     }
 }
+
+final class SkyClockTests: XCTestCase {
+
+    private func local(_ y: Int, _ m: Int, _ d: Int, _ h: Int, _ min: Int, zone: String = "America/Indiana/Indianapolis") -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: zone)!
+        return calendar.date(from: DateComponents(year: y, month: m, day: d, hour: h, minute: min))!
+    }
+
+    private var indiana: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/Indiana/Indianapolis")!
+        return calendar
+    }
+
+    /// Checked against an independent formulation (the sunrise equation),
+    /// which agrees to about a minute; tolerance is three.
+    func testSunsetAndSunriseOnCampus() throws {
+        let november = try XCTUnwrap(SkyClock.sun(on: local(2026, 11, 2, 12, 0), calendar: indiana))
+        XCTAssertEqual(november.sunset.timeIntervalSince(local(2026, 11, 2, 17, 43)), 0, accuracy: 3 * 60)
+        XCTAssertEqual(november.sunrise.timeIntervalSince(local(2026, 11, 2, 7, 18)), 0, accuracy: 3 * 60)
+
+        let june = try XCTUnwrap(SkyClock.sun(on: local(2026, 6, 21, 12, 0), calendar: indiana))
+        XCTAssertEqual(june.sunset.timeIntervalSince(local(2026, 6, 21, 21, 21)), 0, accuracy: 3 * 60)
+    }
+
+    func testNightIsAfterSunsetAndBeforeSunrise() {
+        XCTAssertFalse(SkyClock.isNight(at: local(2026, 11, 2, 16, 30), calendar: indiana))
+        XCTAssertTrue(SkyClock.isNight(at: local(2026, 11, 2, 18, 30), calendar: indiana))
+        XCTAssertTrue(SkyClock.isNight(at: local(2026, 11, 3, 2, 0), calendar: indiana), "Small hours")
+        XCTAssertFalse(SkyClock.isNight(at: local(2026, 11, 3, 9, 0), calendar: indiana))
+    }
+
+    /// The 8 April 2024 eclipse was, necessarily, a new moon.
+    func testMoonPhase() {
+        let eclipse = Date(timeIntervalSince1970: 1_712_600_460) // 2024-04-08 18:21 UTC
+        let phase = SkyClock.moonPhase(at: eclipse)
+        XCTAssertLessThan(min(phase, 1 - phase), 0.04)
+        let fortnightLater = eclipse.addingTimeInterval(14.77 * 86_400)
+        XCTAssertEqual(SkyClock.moonPhase(at: fortnightLater), 0.5, accuracy: 0.04)
+        XCTAssertEqual(SkyClock.illumination(phase: 0.5), 1, accuracy: 0.001)
+        XCTAssertEqual(SkyClock.illumination(phase: 0.25), 0.5, accuracy: 0.001)
+    }
+
+    /// The moon's lit shape covers the right fraction of the disc.
+    func testMoonShapeArea() {
+        func litFraction(_ phase: Double) -> Double {
+            let path = MoonShape(phase: phase).path(in: CGRect(x: 0, y: 0, width: 100, height: 100))
+            var inside = 0, total = 0
+            for x in stride(from: 0.5, to: 100, by: 1) {
+                for y in stride(from: 0.5, to: 100, by: 1) where (x - 50) * (x - 50) + (y - 50) * (y - 50) < 2500 {
+                    total += 1
+                    if path.contains(CGPoint(x: x, y: y)) { inside += 1 }
+                }
+            }
+            return Double(inside) / Double(total)
+        }
+        XCTAssertEqual(litFraction(0.25), 0.5, accuracy: 0.03)
+        XCTAssertEqual(litFraction(0.5), 1, accuracy: 0.03)
+        XCTAssertEqual(litFraction(0.1), SkyClock.illumination(phase: 0.1), accuracy: 0.04)
+        XCTAssertEqual(litFraction(0.85), SkyClock.illumination(phase: 0.85), accuracy: 0.04)
+    }
+}
